@@ -59,18 +59,20 @@ export async function handleInitCommand(flags: string[]): Promise<void> {
     }
   }
 
-  let mode: 'ai' | 'prompt' | 'manual' | 'cancel' = 'ai';
+  let mode: 'ai' | 'prompt' | 'manual' | 'config' | 'cancel' = 'ai';
 
   if (flags.includes('--ai')) mode = 'ai';
   else if (flags.includes('--manual')) mode = 'manual';
   else if (flags.includes('--prompt')) mode = 'prompt';
+  else if (flags.includes('--config')) mode = 'config';
   else {
     const selection = await clack.select({
       message: theme.primary('Como deseja inicializar este projeto?'),
       options: [
         { value: 'ai', label: `${theme.accent('✦')} Agent API (Automático)`, hint: 'Descobre tarefas e gera o arquivo nativamente com LLMs na nuvem' },
         { value: 'prompt', label: `${theme.white('📋')} Copiar Prompt (Export)`, hint: 'Gera um prompt perfeito para colar no ChatGPT/Cursor/Windsurf' },
-        { value: 'manual', label: `${theme.muted('✎')} Modo Manual`, hint: 'Inicia com scripts nativos e inputs básicos' }
+        { value: 'manual', label: `${theme.muted('✎')} Modo Manual`, hint: 'Inicia com scripts nativos e inputs básicos' },
+        { value: 'config', label: `${theme.primary('⚙️')} Configurar Provedor de IA`, hint: 'BYOK — salva chave API em ~/.horus/.env (seguro)' },
       ]
     });
     
@@ -78,7 +80,13 @@ export async function handleInitCommand(flags: string[]): Promise<void> {
       clack.log.info(theme.muted('Inicialização cancelada.'));
       return;
     }
-    mode = selection as 'ai' | 'prompt' | 'manual';
+    mode = selection as 'ai' | 'prompt' | 'manual' | 'config';
+  }
+
+  if (mode === 'config') {
+    const { handleAiConfig } = await import('./ai-config.js');
+    await handleAiConfig();
+    return;
   }
 
   if (mode === 'ai') await runAiInit(targetCwd, outPath);
