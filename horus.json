@@ -1,18 +1,30 @@
 {
-  "name": "Horus",
-  "description": "Gerado pelo horus (heurística local) — stack: Node.js",
+  "name": "fake-next-app",
+  "description": "Gerado pelo horus IA Agent — stack: Next.js + Prisma",
   "tasks": [
     {
       "label": "👁️  Watch Mode",
       "cmd": "npm run dev",
-      "hint": "tsup --watch",
+      "hint": "next dev",
       "group": "Desenvolvimento"
     },
     {
       "label": "🏗️  Build",
       "cmd": "npm run build",
-      "hint": "tsup",
+      "hint": "next build",
       "group": "Build"
+    },
+    {
+      "label": "🚀 Iniciar",
+      "cmd": "npm run start",
+      "hint": "next start",
+      "group": "Desenvolvimento"
+    },
+    {
+      "label": "🔍 Lint",
+      "cmd": "npm run lint",
+      "hint": "eslint src",
+      "group": "Qualidade"
     },
     {
       "label": "🔍 Typecheck",
@@ -21,16 +33,28 @@
       "group": "Qualidade"
     },
     {
-      "label": "🚀 Iniciar",
-      "cmd": "npm run start",
-      "hint": "node dist/bin/horus.js",
-      "group": "Desenvolvimento"
+      "label": "🧪 Testes",
+      "cmd": "npm run test",
+      "hint": "jest",
+      "group": "Testes"
     },
     {
-      "label": "🔍 Lint",
-      "cmd": "npm run lint",
-      "hint": "tsc --noEmit",
-      "group": "Qualidade"
+      "label": "🗄️  Migrar DB",
+      "cmd": "npm run migrate",
+      "hint": "prisma migrate dev",
+      "group": "Banco de Dados"
+    },
+    {
+      "label": "🎨 Studio",
+      "cmd": "npm run studio",
+      "hint": "prisma studio",
+      "group": "Banco de Dados"
+    },
+    {
+      "label": "🌱 Seed DB",
+      "cmd": "npm run seed",
+      "hint": "prisma db seed",
+      "group": "Banco de Dados"
     },
     {
       "label": "🌱 Git: Status",

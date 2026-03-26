@@ -14,10 +14,10 @@
  *   - O import do SDK Gemini é dinâmico para não inflar o bundle inicial.
  */
 
-import * as fs   from 'node:fs';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as os   from 'node:os';
-import { z }     from 'zod';
+import * as os from 'node:os';
+import { z } from 'zod';
 import { HorusConfigSchema } from './parser.js';
 import { setProviderStatus } from '../commands/ai-config.js';
 
@@ -87,7 +87,7 @@ export function scanRepository(cwd: string): string {
 
   const indicatorsFound: string[] = [];
   const executablesFound: string[] = [];
-  
+
   // Extensões que costumam representar entrypoints ou scripts ou stacks
   const STACK_EXT = new Set(['.sln', '.csproj', '.fsproj', '.vbproj', '.csproj.user']);
   const EXEC_EXT = new Set(['.exe', '.bat', '.ps1', '.sh', '.py', '.au3', '.cmd']);
@@ -126,7 +126,7 @@ export function scanRepository(cwd: string): string {
         scripts?: Record<string, string>;
         dependencies?: Record<string, string>;
       };
-      if (pkg.name)        lines.push(`[NAME] ${pkg.name}`);
+      if (pkg.name) lines.push(`[NAME] ${pkg.name}`);
       if (pkg.description) lines.push(`[DESC] ${pkg.description}`);
 
       const notableDeps = Object.keys(pkg.dependencies ?? {})
@@ -151,7 +151,7 @@ export function scanRepository(cwd: string): string {
     .filter((e) => e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith('.'))
     .map((e) => e.name)
     .slice(0, 10);
-    
+
   if (dirs.length) lines.push(`[DIRS] ${dirs.join(', ')}`);
 
   return lines.join('\n');
@@ -179,7 +179,7 @@ ${projectSummary}
 2. O JSON deve seguir EXATAMENTE este schema:
 {
   "name": "string (nome legível do projeto, sem underlines)",
-  "description": "string (descrição concisa, max 80 chars, use Dicas do README se houver)",
+  "description": "string (descrição concisa, max 80 chars, use Dicas do README.md se houver)",
   "tasks": [
     {
       "label": "string (emoji + nome amigável, max 40 chars)",
@@ -222,10 +222,10 @@ function auditTasks(
 // ─── Chamada ao LLM (Lazy-loaded) ────────────────────────────────────────────
 
 async function callAiProvider(prompt: string): Promise<string> {
-  const ollamaModel   = process.env['OLLAMA_MODEL'];
+  const ollamaModel = process.env['OLLAMA_MODEL'];
   const openRouterKey = process.env['OPENROUTER_API_KEY'];
-  const groqKey       = process.env['GROQ_API_KEY'];
-  const geminiKey     = process.env['HORUS_GEMINI_KEY'] ?? process.env['GEMINI_API_KEY'];
+  const groqKey = process.env['GROQ_API_KEY'];
+  const geminiKey = process.env['HORUS_GEMINI_KEY'] ?? process.env['GEMINI_API_KEY'];
 
   if (!ollamaModel && !openRouterKey && !groqKey && !geminiKey) {
     throw Object.assign(new Error('Nenhum provedor de IA encontrado.'), { code: 'no-api-key' });
@@ -293,9 +293,9 @@ async function callAiProvider(prompt: string): Promise<string> {
     } catch (err) {
       const msg = (err as Error).message;
       if (msg.includes('429') || msg.includes('402') || [429, 402].includes((err as any).status)) {
-         setProviderStatus('openrouter', 'quota_exceeded', 'Cota ou Limite atingido');
+        setProviderStatus('openrouter', 'quota_exceeded', 'Cota ou Limite atingido');
       } else {
-         setProviderStatus('openrouter', 'invalid', msg.slice(0, 40));
+        setProviderStatus('openrouter', 'invalid', msg.slice(0, 40));
       }
       errors.push(`[OpenRouter] ${msg}`);
     }
@@ -366,7 +366,7 @@ export async function runAiDiscovery(cwd: string): Promise<AiAgentOutcome> {
 
   // 1. Escanear repositório
   const summary = scanRepository(cwd);
-  const prompt  = buildSystemPrompt(summary, projectName);
+  const prompt = buildSystemPrompt(summary, projectName);
 
   // 2. Chamar o LLM
   let rawJson: string;
