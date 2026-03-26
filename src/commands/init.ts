@@ -225,14 +225,14 @@ async function runAiInit(cwd: string, outPath: string): Promise<void> {
     if (outcome.reason === 'no-api-key') {
       clack.note(
         [
-          `${theme.muted('Para usar o AI Agent, exporte a chave da Groq (Llama 3) ou Google Gemini:')}`,
-          `  ${theme.accent('$')} ${theme.bold('export GROQ_API_KEY="sua-chave-aqui"')}`,
-          `  ${theme.muted('→ Groq (Grátis & Muito Rápido): https://console.groq.com/')}`,
-          `  ${theme.muted('→ Gemini (Grátis): https://aistudio.google.com/')}`,
+          `${theme.muted('Para usar o AI Agent, configure um dos provedores no seu .env:')}`,
+          `  ${theme.accent('1.')} ${theme.bold('Ollama (Local/Offline):')} defina OLLAMA_MODEL="llama3"`,
+          `  ${theme.accent('2.')} ${theme.bold('Groq (Grátis):')} defina GROQ_API_KEY`,
+          `  ${theme.accent('3.')} ${theme.bold('Gemini (Grátis):')} defina GEMINI_API_KEY`,
           '',
           `${theme.muted('Continuando com a heurística local…')}`,
         ].join('\n'),
-        theme.warn('🔑 Chave de API de IA não encontrada'),
+        theme.warn('🔑 Provedor de IA não configurado'),
       );
     } else {
       clack.log.warn(theme.warn(outcome.message));

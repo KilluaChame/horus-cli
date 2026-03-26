@@ -211,17 +211,46 @@ function auditTasks(
 // ─── Chamada ao LLM (Lazy-loaded) ────────────────────────────────────────────
 
 async function callAiProvider(prompt: string): Promise<string> {
-  const groqKey   = process.env['GROQ_API_KEY'];
-  const geminiKey = process.env['HORUS_GEMINI_KEY'] ?? process.env['GEMINI_API_KEY'];
+  const ollamaModel = process.env['OLLAMA_MODEL'];
+  const groqKey     = process.env['GROQ_API_KEY'];
+  const geminiKey   = process.env['HORUS_GEMINI_KEY'] ?? process.env['GEMINI_API_KEY'];
 
-  if (!groqKey && !geminiKey) {
-    throw Object.assign(new Error('Chave de API não encontrada.'), { code: 'no-api-key' });
+  if (!ollamaModel && !groqKey && !geminiKey) {
+    throw Object.assign(new Error('Nenhum provedor de IA encontrado.'), { code: 'no-api-key' });
   }
 
   let text = '';
 
-  if (groqKey) {
-    // ─── Provedor: Groq (Llama 3) ───────────────────────────────────────────
+  if (ollamaModel) {
+    // ─── Provedor: Ollama (Offline / Local) ─────────────────────────────────
+    const host = process.env['OLLAMA_HOST'] ?? 'http://127.0.0.1:11434';
+    
+    try {
+      const response = await fetch(`${host}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: ollamaModel,
+          prompt: prompt,
+          stream: false,
+          format: 'json',
+          options: { temperature: 0.0 }
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Falha HTTP Ollama: ${response.status}`);
+      }
+
+      const data = await response.json() as { response: string };
+      text = data.response;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Erro ao conectar com Ollama no localhost: ${msg}`);
+    }
+    
+  } else if (groqKey) {
+    // ─── Provedor: Groq (Llama 3 Rápido) ────────────────────────────────────
     const { Groq } = await import('groq-sdk');
     const groq = new Groq({ apiKey: groqKey });
     
@@ -249,7 +278,7 @@ async function callAiProvider(prompt: string): Promise<string> {
     text = result.response.text();
   }
 
-  // Remove possível wrapper de markdown inserido pelo LLM (em ambos provedores)
+  // Remove possível wrapper de markdown inserido pelo LLM
   return text
     .replace(/^```(?:json)?\s*/m, '')
     .replace(/\s*```\s*$/m, '')
@@ -276,8 +305,8 @@ export async function runAiDiscovery(cwd: string): Promise<AiAgentOutcome> {
         ok: false,
         reason: 'no-api-key',
         message:
-          'Variáveis de ambiente GROQ_API_KEY ou GEMINI_API_KEY não encontradas.\n' +
-          'Exporte com: export GROQ_API_KEY="sua-chave"',
+          'Nenhum provedor de IA configurado.\n' +
+          'No seu .env, defina OLLAMA_MODEL, GROQ_API_KEY ou GEMINI_API_KEY.',
       };
     }
     return {
