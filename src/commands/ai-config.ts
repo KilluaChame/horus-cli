@@ -389,6 +389,18 @@ async function managePrompts(): Promise<void> {
 }
 
 async function manageSinglePrompt(filename: string, promptStorage: any): Promise<void> {
+  const filePath = path.join(promptStorage.PROMPTS_DIR, filename);
+
+  if (fs.existsSync(filePath)) {
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      clack.note(
+        theme.muted(content.trim().slice(0, 1000) + (content.length > 1000 ? '\n\n...' : '')),
+        theme.primary(`📄 ${filename}`)
+      );
+    } catch { /* silent */ }
+  }
+
   while (true) {
     const action = await clack.select({
       message: theme.primary(`⚙️  Gerenciar Prompt: ${theme.accent(filename)}`),
@@ -420,7 +432,7 @@ async function manageSinglePrompt(filename: string, promptStorage: any): Promise
 
 // ─── Provedores de IA ────────────────────────────────────────────────────────
 
-async function manageProviders(): Promise<void> {
+export async function manageProviders(): Promise<void> {
   const providerGuide = PROVIDERS
     .map((p) => `  ${theme.accent('●')} ${theme.white(p.label.padEnd(22))} ${theme.muted('→')} ${theme.accent(p.keyUrl)}`)
     .join('\n');

@@ -84,8 +84,8 @@ export async function handleInitCommand(flags: string[]): Promise<void> {
   }
 
   if (mode === 'config') {
-    const { handleAiConfig } = await import('./ai-config.js');
-    await handleAiConfig();
+    const { manageProviders } = await import('./ai-config.js');
+    await manageProviders();
     return;
   }
 
@@ -248,7 +248,8 @@ async function runAiInit(cwd: string, outPath: string): Promise<void> {
     }
 
     clack.log.info(theme.accent('Redirecionando automaticamente para configuração de IA...'));
-    await handleAiConfig();
+    const { manageProviders } = await import('./ai-config.js');
+    await manageProviders();
     return;
   }
 
