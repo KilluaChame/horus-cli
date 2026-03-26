@@ -4,12 +4,14 @@
  * Responsabilidades:
  *   1. Orientar o usuário sobre onde obter API Keys dos provedores suportados.
  *   2. Coletar modelo e chave de forma segura (password masking).
- *   3. Persistir em ~/.horus/.env (GLOBAL — nunca no diretório local do projeto).
- *   4. Carregar variáveis sob demanda via dotenv.
+ *   3. Validar chaves via ping mínimo ao endpoint do provedor (Health Check).
+ *   4. Persistir em ~/.horus/.env (GLOBAL — nunca no diretório local do projeto).
+ *   5. Carregar variáveis sob demanda via parser manual.
  *
  * ⚡ Performance (RNF2):
  *   - Este módulo é lazy-loaded: importado apenas quando o usuário acessa
- *     "⚙️ Configurar Provedor de IA" no menu de init.
+ *     "⚙️ Configuração do horus" no menu raiz.
+ *   - Validação de chaves usa fetch() nativo do Node 18+ (zero deps externas).
  *   - Zero I/O no boot do Horus.
  *
  * 🔒 Segurança:
@@ -32,7 +34,17 @@ const HORUS_HOME = path.join(os.homedir(), '.horus');
 /** Caminho do .env global (nunca salvo em repo local) */
 const GLOBAL_ENV_PATH = path.join(HORUS_HOME, '.env');
 
-/** Provedores suportados com catálogo de modelos e documentação */
+// ─── Tipos de Status ──────────────────────────────────────────────────────────
+
+type ProviderStatus = 'pending' | 'valid' | 'invalid';
+
+interface ProviderState {
+  status: ProviderStatus;
+  errorMsg?: string; // ex: "Chave expirada", "401 Unauthorized"
+}
+
+// ─── Catálogo de Provedores ───────────────────────────────────────────────────
+
 const PROVIDERS = [
   {
     value: 'gemini',
@@ -102,9 +114,122 @@ const PROVIDERS = [
   },
 ] as const;
 
-type ProviderValue = typeof PROVIDERS[number]['value'];
+type ProviderDef = typeof PROVIDERS[number];
 
-// ─── Handler Principal (Loop Visual com Status + Catálogo de Modelos) ─────────
+// ─── Validação Ativa (Health Check via fetch nativo) ─────────────────────────
+
+/**
+ * Realiza um ping mínimo ao endpoint do provedor para validar a chave.
+ * Usa fetch() nativo do Node 18+ — zero dependências externas.
+ * Timeout de 6s via AbortController para não travar o CLI.
+ */
+async function validateApiKey(provider: ProviderDef, apiKey: string): Promise<ProviderState> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6000);
+
+  try {
+    let url: string;
+    let options: RequestInit;
+
+    switch (provider.value) {
+      case 'gemini': {
+        // Endpoint leve: lista modelos
+        url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}&pageSize=1`;
+        options = { method: 'GET', signal: controller.signal };
+        break;
+      }
+      case 'openrouter': {
+        url = 'https://openrouter.ai/api/v1/models';
+        options = {
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${apiKey}` },
+          signal: controller.signal,
+        };
+        break;
+      }
+      case 'groq': {
+        url = 'https://api.groq.com/openai/v1/models';
+        options = {
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${apiKey}` },
+          signal: controller.signal,
+        };
+        break;
+      }
+      case 'openai': {
+        url = 'https://api.openai.com/v1/models?limit=1';
+        options = {
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${apiKey}` },
+          signal: controller.signal,
+        };
+        break;
+      }
+      case 'anthropic': {
+        url = 'https://api.anthropic.com/v1/models';
+        options = {
+          method: 'GET',
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          signal: controller.signal,
+        };
+        break;
+      }
+      case 'ollama': {
+        // Ollama local: basta bater no /api/tags
+        url = 'http://localhost:11434/api/tags';
+        options = { method: 'GET', signal: controller.signal };
+        break;
+      }
+      default:
+        return { status: 'valid' }; // fallback seguro
+    }
+
+    const res = await fetch(url, options);
+
+    if (res.ok || res.status === 200) {
+      return { status: 'valid' };
+    }
+
+    if (res.status === 401) {
+      return { status: 'invalid', errorMsg: 'Chave inválida (401)' };
+    }
+    if (res.status === 403) {
+      return { status: 'invalid', errorMsg: 'Acesso negado (403)' };
+    }
+    if (res.status === 429) {
+      // Rate limit não significa chave inválida, significa que funciona
+      return { status: 'valid' };
+    }
+
+    return { status: 'invalid', errorMsg: `Erro HTTP ${res.status}` };
+
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+
+    if (msg.includes('abort') || msg.includes('AbortError')) {
+      return { status: 'invalid', errorMsg: 'Timeout (sem resposta)' };
+    }
+    if (msg.includes('ECONNREFUSED')) {
+      if (provider.value === 'ollama') {
+        return { status: 'invalid', errorMsg: 'Ollama não está rodando' };
+      }
+      return { status: 'invalid', errorMsg: 'Conexão recusada' };
+    }
+    if (msg.includes('ENOTFOUND') || msg.includes('getaddrinfo')) {
+      return { status: 'invalid', errorMsg: 'Sem conexão de rede' };
+    }
+
+    return { status: 'invalid', errorMsg: msg.slice(0, 40) };
+
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// ─── Handler Principal ───────────────────────────────────────────────────────
 
 export async function handleAiConfig(): Promise<void> {
   // Nota informativa inicial (exibida uma vez)
@@ -120,37 +245,68 @@ export async function handleAiConfig(): Promise<void> {
     theme.primary('⚙️  Configuração de Provedores de IA')
   );
 
-  // Set local para rastrear quais provedores foram configurados NESTA sessão
-  const configuredThisSession = new Set<string>();
+  // Cache de status validado nesta sessão (evita re-ping a cada loop)
+  const statusCache = new Map<string, ProviderState>();
 
   // ─── Loop de configuração ─────────────────────────────────────────────
   while (true) {
-    // Lê o .env global para verificar quais já possuem chave
     const existingEnv = readGlobalEnvMap();
 
-    // Monta opções do select com status visual (verde/vermelho)
+    // Monta opções do select com status tri-estágio
     const providerOptions = PROVIDERS.map((p) => {
-      const hasKey = isProviderConfigured(p, existingEnv);
-      const statusIcon = hasKey ? theme.success('✔') : theme.error('✗');
-
-      // Mostra modelo ativo se configurado
+      const hasKey = hasProviderKey(p, existingEnv);
       const activeModel = existingEnv.get(p.modelEnvKey) || '';
-      const modelBadge = hasKey && activeModel ? theme.muted(` [${activeModel}]`) : '';
 
-      const statusHint = hasKey
-        ? theme.success('Configurado') + modelBadge + (configuredThisSession.has(p.value) ? theme.muted(' (agora)') : '')
-        : theme.error('Pendente') + theme.muted(` — ${p.hint}`);
+      // Determina estado visual
+      let state: ProviderState = { status: 'pending' };
+
+      if (hasKey) {
+        // Usa cache de validação se disponível, senão marca como "valid" (otimista)
+        state = statusCache.get(p.value) ?? { status: 'valid' };
+      }
+
+      // Renderiza badge
+      let statusIcon: string;
+      let labelText: string;
+      let hintText: string;
+
+      switch (state.status) {
+        case 'valid': {
+          statusIcon = theme.success('✔');
+          labelText = theme.success(p.label);
+          const modelBadge = activeModel ? theme.muted(` [${activeModel}]`) : '';
+          hintText = theme.success('Ativo') + modelBadge;
+          break;
+        }
+        case 'invalid': {
+          statusIcon = theme.error('✗');
+          labelText = theme.warn(p.label);
+          hintText = theme.error(state.errorMsg ?? 'Chave inválida');
+          break;
+        }
+        default: {
+          statusIcon = theme.error('✗');
+          labelText = theme.error(p.label);
+          hintText = theme.error('Pendente') + theme.muted(` — ${p.hint}`);
+          break;
+        }
+      }
 
       return {
         value: p.value,
-        label: `${statusIcon}  ${hasKey ? theme.success(p.label) : theme.error(p.label)}`,
-        hint: statusHint,
+        label: `${statusIcon}  ${labelText}`,
+        hint: hintText,
       };
     });
 
-    // Adiciona opção de voltar ao final
+    // Opções de controle
     const allOptions = [
       ...providerOptions,
+      {
+        value: '__retest__' as string,
+        label: `${theme.accent('⟳')}  Retestar todas as chaves`,
+        hint: theme.muted('Valida as chaves salvas contra os provedores'),
+      },
       {
         value: '__back__' as string,
         label: `${theme.muted('←')}  Voltar ao menu`,
@@ -164,14 +320,19 @@ export async function handleAiConfig(): Promise<void> {
     });
 
     if (wasCancelled(selectedProvider) || selectedProvider === '__back__') {
-      // Resumo final antes de sair
       const finalEnv = readGlobalEnvMap();
-      const totalConfigured = PROVIDERS.filter((p) => isProviderConfigured(p, finalEnv)).length;
+      const totalConfigured = PROVIDERS.filter((p) => hasProviderKey(p, finalEnv)).length;
+      const totalValid = [...statusCache.values()].filter((s) => s.status === 'valid').length;
+
       if (totalConfigured > 0) {
+        const validLabel = totalValid > 0
+          ? theme.success(`${totalValid} validados`)
+          : theme.muted('não testados');
         clack.log.success(
           theme.success(`${totalConfigured}/${PROVIDERS.length}`) +
-          theme.white(' provedores configurados. ') +
-          theme.muted('Execute ') + theme.accent('hrs init --ai') + theme.muted(' para usar!')
+          theme.white(' provedores configurados ') +
+          theme.muted('(') + validLabel + theme.muted(') — ') +
+          theme.accent('hrs init --ai') + theme.muted(' para usar!')
         );
       } else {
         clack.log.info(theme.muted('Nenhum provedor configurado.'));
@@ -179,11 +340,93 @@ export async function handleAiConfig(): Promise<void> {
       return;
     }
 
+    // ── Retestar todas as chaves ─────────────────────────────────────────
+    if (selectedProvider === '__retest__') {
+      const s = clack.spinner();
+      s.start(theme.muted('Validando chaves contra os provedores...'));
+
+      const envMap = readGlobalEnvMap();
+      let validCount = 0;
+      let invalidCount = 0;
+
+      for (const p of PROVIDERS) {
+        if (!hasProviderKey(p, envMap)) continue;
+
+        const keyValue = p.value === 'ollama' ? 'local' : (envMap.get(p.envKey) || process.env[p.envKey] || '');
+        const result = await validateApiKey(p, keyValue);
+        statusCache.set(p.value, result);
+
+        if (result.status === 'valid') validCount++;
+        else invalidCount++;
+      }
+
+      s.stop(
+        theme.success(`✔ ${validCount} válidos`) +
+        (invalidCount > 0 ? theme.error(` · ✗ ${invalidCount} com erro`) : '') +
+        theme.muted(' — veja o status abaixo')
+      );
+      continue;
+    }
+
     // ── Configurar o provedor selecionado ────────────────────────────────
     const provider = PROVIDERS.find((p) => p.value === selectedProvider)!;
     const isOllama = provider.value === 'ollama';
 
-    // 1. Sub-menu de seleção de modelo
+    // Passo 1: API Key (skip para Ollama)
+    let apiKey = '';
+
+    if (!isOllama) {
+      clack.log.info(
+        theme.muted('🔑 Obtenha sua chave em: ') +
+        theme.accent(provider.keyUrl)
+      );
+
+      const keyInput = await clack.password({
+        message: theme.white(`API Key para ${provider.label}:`),
+        validate: (v) => {
+          if (!v || v.trim().length < 8) return 'A chave deve ter no mínimo 8 caracteres.';
+        },
+      });
+
+      if (wasCancelled(keyInput)) continue;
+      apiKey = (keyInput as string).trim();
+
+      // Health Check imediato após inserção
+      const validationSpinner = clack.spinner();
+      validationSpinner.start(theme.muted(`Validando chave para ${provider.label}...`));
+
+      const result = await validateApiKey(provider, apiKey);
+      statusCache.set(provider.value, result);
+
+      if (result.status === 'invalid') {
+        validationSpinner.stop(theme.error(`✗ ${result.errorMsg ?? 'Chave inválida'}`));
+
+        const proceed = await clack.confirm({
+          message: theme.warn('A chave não passou no teste. Deseja salvar mesmo assim?'),
+          initialValue: false,
+        });
+
+        if (wasCancelled(proceed) || !proceed) continue;
+      } else {
+        validationSpinner.stop(theme.success('✔ Chave válida!'));
+      }
+    } else {
+      // Ollama: testa se o serviço está rodando
+      const ollamaSpinner = clack.spinner();
+      ollamaSpinner.start(theme.muted('Verificando serviço Ollama local...'));
+
+      const result = await validateApiKey(provider, '');
+      statusCache.set(provider.value, result);
+
+      if (result.status === 'invalid') {
+        ollamaSpinner.stop(theme.warn(`⚠ ${result.errorMsg}`));
+        clack.log.warn(theme.muted('O Ollama pode não estar rodando. Instale em: ') + theme.accent(provider.keyUrl));
+      } else {
+        ollamaSpinner.stop(theme.success('✔ Ollama está rodando!'));
+      }
+    }
+
+    // Passo 2: Seleção de modelo
     const modelOptions = [
       ...provider.models.map((m) => ({
         value: m as string,
@@ -207,7 +450,6 @@ export async function handleAiConfig(): Promise<void> {
     let modelName: string;
 
     if (modelChoice === '__custom__') {
-      // Nota com link de documentação para ajudar o dev a encontrar o nome certo
       clack.log.info(
         theme.muted('📚 Consulte os modelos disponíveis em: ') +
         theme.accent(provider.modelsUrl)
@@ -227,27 +469,13 @@ export async function handleAiConfig(): Promise<void> {
       modelName = modelChoice as string;
     }
 
-    // 2. API Key (skip para Ollama)
-    let apiKey = '';
+    // Passo 3: Nota de referência com link de documentação
+    clack.log.info(
+      theme.muted('📖 Referência de modelos: ') +
+      theme.accent(provider.modelsUrl)
+    );
 
-    if (!isOllama) {
-      clack.log.info(
-        theme.muted('🔑 Obtenha sua chave em: ') +
-        theme.accent(provider.keyUrl)
-      );
-
-      const keyInput = await clack.password({
-        message: theme.white(`API Key para ${provider.label}:`),
-        validate: (v) => {
-          if (!v || v.trim().length < 8) return 'A chave deve ter no mínimo 8 caracteres.';
-        },
-      });
-
-      if (wasCancelled(keyInput)) continue;
-      apiKey = (keyInput as string).trim();
-    }
-
-    // 3. Persistir no ~/.horus/.env
+    // Passo 4: Persistir no ~/.horus/.env
     const s = clack.spinner();
     s.start(theme.muted(`Salvando ${provider.label}...`));
 
@@ -280,12 +508,17 @@ export async function handleAiConfig(): Promise<void> {
         process.env[provider.envKey] = apiKey;
       }
 
-      configuredThisSession.add(provider.value);
-
-      s.stop(theme.success(`✔ ${provider.label} configurado!`));
+      s.stop(theme.success(`✔ ${provider.label} salvo!`));
 
       // Feedback inline compacto
-      console.log(`  ${theme.muted('│')}  ${theme.muted('Modelo:')} ${theme.accent(modelName)}  ${theme.muted('Chave:')} ${isOllama ? theme.muted('(local)') : theme.success('●●●●' + apiKey.slice(-4))}`);
+      const keyDisplay = isOllama
+        ? theme.muted('(local)')
+        : theme.success('●●●●' + apiKey.slice(-4));
+      const statusDisplay = statusCache.get(provider.value)?.status === 'valid'
+        ? theme.success(' ✔ Validado')
+        : theme.warn(' ⚠ Não testado');
+
+      console.log(`  ${theme.muted('│')}  ${theme.muted('Modelo:')} ${theme.accent(modelName)}  ${theme.muted('Chave:')} ${keyDisplay}${statusDisplay}`);
       console.log();
 
     } catch (err) {
@@ -313,23 +546,23 @@ function readGlobalEnvMap(): Map<string, string> {
       if (eqIdx === -1) continue;
       const key = trimmed.slice(0, eqIdx).trim();
       const val = trimmed.slice(eqIdx + 1).trim();
-      if (val) map.set(key, val);
+      // String vazia = chave inexistente (Zod-like strictness)
+      if (val && val.length > 0) map.set(key, val);
     }
   } catch { /* silencioso */ }
   return map;
 }
 
-/** Verifica se um provedor já possui chave configurada */
-function isProviderConfigured(
-  provider: typeof PROVIDERS[number],
+/** Verifica se um provedor possui chave API presente (não vazia) */
+function hasProviderKey(
+  provider: ProviderDef,
   envMap: Map<string, string>,
 ): boolean {
   if (provider.value === 'ollama') {
-    // Ollama: basta o modelo estar definido ou ollama estar rodando
     return envMap.has('OLLAMA_MODEL') || !!process.env['OLLAMA_MODEL'];
   }
-  // Provedores de API: verifica se a envKey tem valor
-  return envMap.has(provider.envKey) || !!process.env[provider.envKey];
+  const fromEnv = envMap.get(provider.envKey) || process.env[provider.envKey] || '';
+  return fromEnv.length >= 8; // chaves reais sempre têm 8+ caracteres
 }
 
 // ─── Utilitários de .env ──────────────────────────────────────────────────────
@@ -353,7 +586,6 @@ function upsertEnvVar(content: string, key: string, value: string): string {
   });
 
   if (!found) {
-    // Adiciona ao final, garantindo uma linha vazia antes se necessário
     const trimmed = updated.filter((l) => l.trim() !== '' || updated.indexOf(l) < updated.length - 1);
     trimmed.push(newLine);
     return trimmed.join('\n') + '\n';
@@ -383,7 +615,7 @@ export function loadGlobalEnv(): void {
         const val = trimmed.slice(eqIdx + 1).trim();
 
         // Não sobrescreve se já estiver definida (prioridade: env do SO > .env global)
-        if (!process.env[key]) {
+        if (!process.env[key] && val.length > 0) {
           process.env[key] = val;
         }
       }
