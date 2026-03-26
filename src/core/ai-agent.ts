@@ -78,18 +78,17 @@ export function scanRepository(cwd: string): string {
   const indicatorsFound: string[] = [];
   const executablesFound: string[] = [];
   
-  // Extensões que costumam representar entrypoints ou scripts
+  // Extensões que costumam representar entrypoints ou scripts ou stacks
+  const STACK_EXT = new Set(['.sln', '.csproj', '.fsproj', '.vbproj', '.csproj.user']);
   const EXEC_EXT = new Set(['.exe', '.bat', '.ps1', '.sh', '.py', '.au3', '.cmd']);
 
   for (const e of entries) {
     if (e.isFile()) {
-      if (ROOT_INDICATORS.has(e.name)) {
+      const ext = path.extname(e.name).toLowerCase();
+      if (ROOT_INDICATORS.has(e.name) || STACK_EXT.has(ext)) {
         indicatorsFound.push(e.name);
-      } else {
-        const ext = path.extname(e.name).toLowerCase();
-        if (EXEC_EXT.has(ext)) {
-          executablesFound.push(e.name);
-        }
+      } else if (EXEC_EXT.has(ext)) {
+        executablesFound.push(e.name);
       }
     }
   }
@@ -102,7 +101,7 @@ export function scanRepository(cwd: string): string {
   if (readmePath) {
     try {
       const readme = fs.readFileSync(path.join(cwd, readmePath), 'utf-8');
-      const snippet = readme.slice(0, 2500); // Passamos até 2500 chars do README real
+      const snippet = readme.slice(0, 1500); // 1500 chars = equilíbrio ideal entre contexto útil e payload não-gigante
       lines.push(`[README EXTRACT]\n${snippet}\n[END README]`);
     } catch { /* Ignora erro ao ler README */ }
   }
@@ -259,6 +258,7 @@ async function callAiProvider(prompt: string): Promise<string> {
           model: 'meta-llama/llama-3.3-70b-instruct:free',
           messages: [{ role: 'user', content: prompt }],
           temperature: 0,
+          max_tokens: 2000,
           response_format: { type: 'json_object' }
         }),
       });
@@ -280,6 +280,7 @@ async function callAiProvider(prompt: string): Promise<string> {
         model: 'llama-3.1-8b-instant',
         response_format: { type: 'json_object' },
         temperature: 0,
+        max_tokens: 2000,
       });
       text = completion.choices[0]?.message?.content ?? '';
     } catch (err) {
