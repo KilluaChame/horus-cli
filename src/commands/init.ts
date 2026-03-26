@@ -59,11 +59,31 @@ export async function handleInitCommand(flags: string[]): Promise<void> {
     }
   }
 
-  if (isAiMode) {
-    await runAiInit(targetCwd, outPath);
-  } else {
-    await runInteractiveInit(targetCwd, outPath);
+  let mode: 'ai' | 'prompt' | 'manual' | 'cancel' = 'ai';
+
+  if (flags.includes('--ai')) mode = 'ai';
+  else if (flags.includes('--manual')) mode = 'manual';
+  else if (flags.includes('--prompt')) mode = 'prompt';
+  else {
+    const selection = await clack.select({
+      message: theme.primary('Como deseja inicializar este projeto?'),
+      options: [
+        { value: 'ai', label: `${theme.accent('✦')} Agent API (Automático)`, hint: 'Descobre tarefas e gera o arquivo nativamente com LLMs na nuvem' },
+        { value: 'prompt', label: `${theme.white('📋')} Copiar Prompt (Export)`, hint: 'Gera um prompt perfeito para colar no ChatGPT/Cursor/Windsurf' },
+        { value: 'manual', label: `${theme.muted('✎')} Modo Manual`, hint: 'Inicia com scripts nativos e inputs básicos' }
+      ]
+    });
+    
+    if (wasCancelled(selection)) {
+      clack.log.info(theme.muted('Inicialização cancelada.'));
+      return;
+    }
+    mode = selection as 'ai' | 'prompt' | 'manual';
   }
+
+  if (mode === 'ai') await runAiInit(targetCwd, outPath);
+  else if (mode === 'prompt') await runPromptExport(targetCwd);
+  else await runInteractiveInit(targetCwd, outPath);
 }
 
 // ─── Seleção de Diretório ───────────────────────────────────────────────────
@@ -294,6 +314,30 @@ async function runAiInit(cwd: string, outPath: string): Promise<void> {
 
   // Converte para Record<string, unknown> para writeAndReport
   writeAndReport(outcome.config as unknown as Record<string, unknown>, outPath);
+}
+
+// ─── Export de Prompt (Para colar em IDEs ou ChatGPT) ────────────────────────
+
+async function runPromptExport(cwd: string): Promise<void> {
+  const s = clack.spinner();
+  s.start(theme.muted('Escaneando repositório para formatar o Prompt de IA…'));
+  
+  // Lazy imports
+  const { scanRepository, buildSystemPrompt } = await import('../core/ai-agent.js');
+  
+  const projectName = path.basename(cwd);
+  const summary = scanRepository(cwd);
+  const promptRaw = buildSystemPrompt(summary, projectName);
+  
+  s.stop(theme.success('📋 Prompt para Geração de horus.json finalizado com sucesso!'));
+  
+  clack.note(
+    theme.muted(promptRaw),
+    theme.primary('Copie o texto abaixo e cole no ChatGPT, Claude, Cursor ou Windsurf')
+  );
+  
+  clack.log.info(theme.accent('↑ Acima está todo o contexto mapeado do projeto!'));
+  clack.log.info(theme.muted('Cole no seu Chatbot preferido, ele gerará o horus.json instantaneamente para você.'));
 }
 
 // ─── Análise de Stack (heurística local) ────────────────────────────────────

@@ -384,8 +384,8 @@ async function showInteractiveMenu(): Promise<void> {
         break;
 
       case 'INIT':
-        // Fase 9: Menu visual agora sempre dispara a experiência Inteligente (--ai)
-        await handleInitCommand(['--ai']);
+        // Menu visual agora permite escolher a estratégia Inteligente, Manual ou Prompt Export
+        await handleInitCommand([]);
         appState = 'HOME';
         break;
         

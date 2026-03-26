@@ -158,7 +158,7 @@ export function scanRepository(cwd: string): string {
 
 // ─── System Prompt ───────────────────────────────────────────────────────────
 
-function buildSystemPrompt(projectSummary: string, projectName: string): string {
+export function buildSystemPrompt(projectSummary: string, projectName: string): string {
   return `
 Você é um especialista em DevOps e Developer Experience (DX). Analise o seguinte contexto de projeto e gere um objeto JSON válido no formato especificado abaixo.
 
