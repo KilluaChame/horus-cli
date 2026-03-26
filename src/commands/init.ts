@@ -307,6 +307,7 @@ interface StackInfo {
   hasPyproject: boolean;
   hasCargoToml: boolean;
   hasGoMod: boolean;
+  hasDotnet: boolean;
   scripts: Record<string, string>;
   dependencies: Record<string, string>;
 }
@@ -322,6 +323,14 @@ function analyzeProjectStack(cwd: string): StackInfo {
   const hasPyproject  = exists('pyproject.toml') || exists('requirements.txt');
   const hasCargoToml  = exists('Cargo.toml');
   const hasGoMod      = exists('go.mod');
+
+  // .NET: detecta .sln na raiz ou qualquer .csproj
+  const hasDotnet = (() => {
+    try {
+      const rootEntries = fs.readdirSync(cwd);
+      return rootEntries.some((f) => f.endsWith('.sln') || f.endsWith('.csproj'));
+    } catch { return false; }
+  })();
 
   // Lê scripts e deps do package.json
   let scripts: Record<string, string> = {};
@@ -355,6 +364,7 @@ function analyzeProjectStack(cwd: string): StackInfo {
   if (hasNest)   stackParts.push('NestJS');
   if (hasPrisma) stackParts.push('Prisma');
   if (hasDocker) stackParts.push('Docker');
+  if (hasDotnet) stackParts.push('.NET');
   if (hasPyproject) stackParts.push('Python');
   if (hasCargoToml) stackParts.push('Rust');
   if (hasGoMod)  stackParts.push('Go');
@@ -369,6 +379,7 @@ function analyzeProjectStack(cwd: string): StackInfo {
     hasPyproject,
     hasCargoToml,
     hasGoMod,
+    hasDotnet,
     scripts,
     dependencies,
   };
@@ -479,6 +490,16 @@ function generateAiTasks(info: StackInfo): TaskDraft[] {
       { label: '🐹 Go: Run',   cmd: 'go run .',       group: 'Go' },
       { label: '🐹 Go: Build', cmd: 'go build .',     group: 'Go' },
       { label: '🐹 Go: Test',  cmd: 'go test ./...',  group: 'Go' },
+    );
+  }
+
+  // .NET (C# / F#)
+  if (info.hasDotnet) {
+    tasks.push(
+      { label: '🟣 .NET: Build',   cmd: 'dotnet build',                 hint: 'Compila o projeto',       group: '.NET' },
+      { label: '🟣 .NET: Run',     cmd: 'dotnet run',                   hint: 'Executa o projeto',       group: '.NET' },
+      { label: '🟣 .NET: Test',    cmd: 'dotnet test',                  hint: 'Roda os testes',          group: '.NET' },
+      { label: '🟣 .NET: Publish', cmd: 'dotnet publish -c Release',    hint: 'Publica para produção',   group: '.NET' },
     );
   }
 

@@ -186,10 +186,15 @@ async function handleReadmeCommand(): Promise<void> {
 
     const content = fs.readFileSync(path.join(cwd, readmeFile.name), 'utf-8');
     
-    // Mostra o README renderizado em modo Note
+    // Trunca para evitar flood no terminal (clack.note não tem scroll)
+    const MAX_DISPLAY = 3000;
+    const display = content.length > MAX_DISPLAY
+      ? content.slice(0, MAX_DISPLAY).trimEnd() + '\n\n' + theme.muted(`… (truncado em ${MAX_DISPLAY} chars — use "cat ${readmeFile.name}" para o completo)`)
+      : content.trim() || '(README vazio)';
+
     clack.note(
-      content.trim() || '(README vazio)',
-      theme.primary(`📖 ${readmeFile.name}`),
+      display,
+      theme.primary(`📖 ${readmeFile.name} (${(content.length / 1024).toFixed(1)} KB)`),
     );
 
     // Espera o usuário ler

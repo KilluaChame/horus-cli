@@ -40,15 +40,24 @@ export type AiAgentOutcome = AiAgentResult | AiAgentError;
 
 /** Comandos ou padrões de shell que representam risco alto */
 const DANGEROUS_PATTERNS = [
+  // Unix/Linux
   /rm\s+-rf?\s+\/(?!\w)/,         // rm -rf /
   /:\(\)\{.*\|.*&\};:/,           // fork bomb
   /dd\s+if=\/dev\/zero/,          // dd nuke
   /mkfs\./,                       // formatar partição
-  /shutdown|halt|reboot/,
+  /shutdown|halt|reboot/i,
   /curl.*\|.*sh/,                  // pipe-to-shell
   /wget.*\|.*sh/,
   /chmod\s+777\s+\//,
-  />\s*\/etc\/passwd/,
+  />(\s*)\/etc\/passwd/,
+  // Windows / PowerShell
+  /format\s+[a-z]:/i,              // Format C:
+  /del\s+\/s\s+\/q\s+[a-z]:\\/i, // del /s /q C:\
+  /rd\s+\/s\s+\/q\s+[a-z]:\\/i,  // rd /s /q C:\
+  /stop-computer/i,                // PowerShell shutdown
+  /restart-computer/i,             // PowerShell reboot
+  /clear-content\s+[a-z]:\\/i,    // PowerShell wipe
+  /remove-item\s+-recurse\s+-force\s+[a-z]:\\/i, // PowerShell rm -rf
 ];
 
 // ─── Scanner de Repositório ──────────────────────────────────────────────────
@@ -180,10 +189,12 @@ ${projectSummary}
   ]
 }
 
-3. Use emojis relevantes: Executável = ⚙️  | Python = 🐍 | JS/TS = 📦 | Shell/Bat = 🪟 | Docker = 🐳
+3. Use emojis relevantes: Executável = ⚙️  | Python = 🐍 | JS/TS = 📦 | Shell/Bat = 🪟 | Docker = 🐳 | .NET = 🟣
 4. Gere no máximo 15 tasks relevantes. Filtre as inúteis.
 5. O campo "name" deve ser derivado do contexto ou "${projectName}".
-6. NÃO inclua comandos destrutivos (rm -rf, etc).
+6. NÃO inclua comandos destrutivos (rm -rf, del /s /q, Format C:, etc).
+7. Se houver arquivos .sln ou .csproj, gere tarefas .NET como: "dotnet build", "dotnet run", "dotnet test", "dotnet publish -c Release".
+8. Se houver arquivos .bat, .ps1 ou .cmd, gere tarefas que os executem diretamente (ex: ".\\run.bat").
 `.trim();
 }
 
