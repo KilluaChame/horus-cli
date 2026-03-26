@@ -19,6 +19,7 @@ import * as path from 'node:path';
 import * as os   from 'node:os';
 import { z }     from 'zod';
 import { HorusConfigSchema } from './parser.js';
+import { setProviderStatus } from '../commands/ai-config.js';
 
 // ─── Tipos públicos ───────────────────────────────────────────────────────────
 
@@ -246,17 +247,25 @@ async function callAiProvider(prompt: string): Promise<string> {
           options: { temperature: 0.0 }
         }),
       });
-      if (!response.ok) throw new Error(`Falha Ollama HTTP: ${response.status}`);
+      if (!response.ok) {
+        if (response.status === 429) throw Object.assign(new Error(`Ollama HTTP 429: Too Many Requests`), { status: 429 });
+        throw new Error(`Falha Ollama HTTP: ${response.status}`);
+      }
       const data = await response.json() as { response: string };
       text = data.response;
+      setProviderStatus('ollama', 'valid');
     } catch (err) {
-      errors.push(`[Ollama] ${(err as Error).message}`);
+      const msg = (err as Error).message;
+      if (msg.includes('429') || (err as any).status === 429) setProviderStatus('ollama', 'quota_exceeded', 'Rate Limit (429)');
+      else setProviderStatus('ollama', 'invalid', msg.slice(0, 40));
+      errors.push(`[Ollama] ${msg}`);
     }
   }
 
   // 2. Provedor Nuvem (OpenRouter)
   if (openRouterKey && !text) {
     try {
+      const model = process.env['OPENROUTER_MODEL'] || 'meta-llama/llama-3.3-70b-instruct:free';
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -266,18 +275,29 @@ async function callAiProvider(prompt: string): Promise<string> {
           'X-Title': 'Horus CLI',
         },
         body: JSON.stringify({
-          model: 'meta-llama/llama-3.3-70b-instruct:free',
+          model,
           messages: [{ role: 'user', content: prompt }],
           temperature: 0,
           max_tokens: 2000,
           response_format: { type: 'json_object' }
         }),
       });
-      if (!response.ok) throw new Error(`Falha OpenRouter HTTP: ${response.status} - ${await response.text()}`);
+      if (!response.ok) {
+        if (response.status === 429) throw Object.assign(new Error(`OpenRouter HTTP 429: Rate Limit`), { status: 429 });
+        if (response.status === 402) throw Object.assign(new Error(`OpenRouter HTTP 402: Payment Required`), { status: 402 });
+        throw new Error(`Falha OpenRouter HTTP: ${response.status} - ${await response.text()}`);
+      }
       const data = await response.json() as { choices: Array<{ message: { content: string } }> };
       text = data.choices?.[0]?.message?.content ?? '';
+      setProviderStatus('openrouter', 'valid');
     } catch (err) {
-      errors.push(`[OpenRouter] ${(err as Error).message}`);
+      const msg = (err as Error).message;
+      if (msg.includes('429') || msg.includes('402') || [429, 402].includes((err as any).status)) {
+         setProviderStatus('openrouter', 'quota_exceeded', 'Cota ou Limite atingido');
+      } else {
+         setProviderStatus('openrouter', 'invalid', msg.slice(0, 40));
+      }
+      errors.push(`[OpenRouter] ${msg}`);
     }
   }
 
@@ -286,16 +306,21 @@ async function callAiProvider(prompt: string): Promise<string> {
     try {
       const { Groq } = await import('groq-sdk');
       const groq = new Groq({ apiKey: groqKey });
+      const model = process.env['GROQ_MODEL'] || 'llama-3.1-8b-instant';
       const completion = await groq.chat.completions.create({
         messages: [{ role: 'user', content: prompt }],
-        model: 'llama-3.1-8b-instant',
+        model,
         response_format: { type: 'json_object' },
         temperature: 0,
         max_tokens: 2000,
       });
       text = completion.choices[0]?.message?.content ?? '';
+      setProviderStatus('groq', 'valid');
     } catch (err) {
-      errors.push(`[Groq] ${(err as Error).message}`);
+      const msg = (err as Error).message;
+      if (msg.includes('429') || msg.includes('rate limit')) setProviderStatus('groq', 'quota_exceeded', 'Rate Limit de Tokens/Min atingido');
+      else setProviderStatus('groq', 'invalid', msg.slice(0, 40));
+      errors.push(`[Groq] ${msg}`);
     }
   }
 
@@ -304,14 +329,23 @@ async function callAiProvider(prompt: string): Promise<string> {
     try {
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(geminiKey);
+      const modelName = process.env['GEMINI_MODEL'] || 'gemini-2.0-flash';
       const model = genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash',
+        model: modelName,
         generationConfig: { responseMimeType: 'application/json', temperature: 0 },
       });
       const result = await model.generateContent(prompt);
       text = result.response.text();
+      setProviderStatus('gemini', 'valid');
     } catch (err) {
-      errors.push(`[Gemini] ${(err as Error).message}`);
+      const msg = (err as Error).message;
+      // Trata mensagem de cota esgotada (quota exceeded)
+      if (msg.includes('429') || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('rate')) {
+        setProviderStatus('gemini', 'quota_exceeded', 'Cota gratuita esgotada ou Rate Limit');
+      } else {
+        setProviderStatus('gemini', 'invalid', msg.slice(0, 40));
+      }
+      errors.push(`[Gemini] ${msg}`);
     }
   }
 

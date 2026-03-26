@@ -36,11 +36,34 @@ const GLOBAL_ENV_PATH = path.join(HORUS_HOME, '.env');
 
 // ─── Tipos de Status ──────────────────────────────────────────────────────────
 
-type ProviderStatus = 'pending' | 'valid' | 'invalid';
+export type ProviderStatus = 'pending' | 'valid' | 'invalid' | 'quota_exceeded';
 
-interface ProviderState {
+export interface ProviderState {
   status: ProviderStatus;
   errorMsg?: string; // ex: "Chave expirada", "401 Unauthorized"
+}
+
+export function readStatusMap(): Map<string, ProviderState> {
+  const statusPath = path.join(HORUS_HOME, 'status.json');
+  if (!fs.existsSync(statusPath)) return new Map();
+  try {
+    const data = JSON.parse(fs.readFileSync(statusPath, 'utf-8'));
+    return new Map(Object.entries(data));
+  } catch { return new Map(); }
+}
+
+export function writeStatusMap(map: Map<string, ProviderState>): void {
+  if (!fs.existsSync(HORUS_HOME)) fs.mkdirSync(HORUS_HOME, { recursive: true });
+  const statusPath = path.join(HORUS_HOME, 'status.json');
+  fs.writeFileSync(statusPath, JSON.stringify(Object.fromEntries(map), null, 2), 'utf-8');
+}
+
+export function setProviderStatus(provider: string, status: ProviderStatus, errorMsg?: string): void {
+  const map = readStatusMap();
+  const state: ProviderState = { status };
+  if (errorMsg) state.errorMsg = errorMsg;
+  map.set(provider, state);
+  writeStatusMap(map);
 }
 
 // ─── Catálogo de Provedores ───────────────────────────────────────────────────
@@ -200,8 +223,7 @@ async function validateApiKey(provider: ProviderDef, apiKey: string): Promise<Pr
       return { status: 'invalid', errorMsg: 'Acesso negado (403)' };
     }
     if (res.status === 429) {
-      // Rate limit não significa chave inválida, significa que funciona
-      return { status: 'valid' };
+      return { status: 'quota_exceeded', errorMsg: 'Cota de requisições excedida (429)' };
     }
 
     return { status: 'invalid', errorMsg: `Erro HTTP ${res.status}` };
@@ -245,12 +267,10 @@ export async function handleAiConfig(): Promise<void> {
     theme.primary('⚙️  Configuração de Provedores de IA')
   );
 
-  // Cache de status validado nesta sessão (evita re-ping a cada loop)
-  const statusCache = new Map<string, ProviderState>();
-
   // ─── Loop de configuração ─────────────────────────────────────────────
   while (true) {
     const existingEnv = readGlobalEnvMap();
+    const statusCache = readStatusMap();
 
     // Monta opções do select com status tri-estágio
     const providerOptions = PROVIDERS.map((p) => {
@@ -282,6 +302,12 @@ export async function handleAiConfig(): Promise<void> {
           statusIcon = theme.error('✗');
           labelText = theme.warn(p.label);
           hintText = theme.error(state.errorMsg ?? 'Chave inválida');
+          break;
+        }
+        case 'quota_exceeded': {
+          statusIcon = theme.purple('⚠');
+          labelText = theme.purple(p.label);
+          hintText = theme.purple(state.errorMsg ?? 'Cota excedida / Rate Limit');
           break;
         }
         default: {
@@ -354,7 +380,7 @@ export async function handleAiConfig(): Promise<void> {
 
         const keyValue = p.value === 'ollama' ? 'local' : (envMap.get(p.envKey) || process.env[p.envKey] || '');
         const result = await validateApiKey(p, keyValue);
-        statusCache.set(p.value, result);
+        setProviderStatus(p.value, result.status, result.errorMsg);
 
         if (result.status === 'valid') validCount++;
         else invalidCount++;
@@ -396,10 +422,11 @@ export async function handleAiConfig(): Promise<void> {
       validationSpinner.start(theme.muted(`Validando chave para ${provider.label}...`));
 
       const result = await validateApiKey(provider, apiKey);
-      statusCache.set(provider.value, result);
+      setProviderStatus(provider.value, result.status, result.errorMsg);
 
-      if (result.status === 'invalid') {
-        validationSpinner.stop(theme.error(`✗ ${result.errorMsg ?? 'Chave inválida'}`));
+      if (result.status === 'invalid' || result.status === 'quota_exceeded') {
+        const errorTheme = result.status === 'quota_exceeded' ? theme.purple : theme.error;
+        validationSpinner.stop(errorTheme(`✗ ${result.errorMsg ?? 'Erro de validação'}`));
 
         const proceed = await clack.confirm({
           message: theme.warn('A chave não passou no teste. Deseja salvar mesmo assim?'),
@@ -416,7 +443,7 @@ export async function handleAiConfig(): Promise<void> {
       ollamaSpinner.start(theme.muted('Verificando serviço Ollama local...'));
 
       const result = await validateApiKey(provider, '');
-      statusCache.set(provider.value, result);
+      setProviderStatus(provider.value, result.status, result.errorMsg);
 
       if (result.status === 'invalid') {
         ollamaSpinner.stop(theme.warn(`⚠ ${result.errorMsg}`));

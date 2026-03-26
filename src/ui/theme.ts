@@ -30,6 +30,9 @@ export const theme = {
   /** Texto de aviso */
   warn: (text: string) => pc.yellow(text),
 
+  /** Texto roxo (cota excedida) */
+  purple: (text: string) => pc.magenta(pc.bold(text)),
+
   /** Texto apagado / metadata */
   muted: (text: string) => pc.dim(text),
 
