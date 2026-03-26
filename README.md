@@ -9,7 +9,7 @@
     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
 ```
 
-**The All-Seeing Gateway**
+**The All-Seeing Gateway**teste
 
 _Navegação visual, execução delegada._
 
