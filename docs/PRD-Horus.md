@@ -243,13 +243,21 @@ Ao entrar em um projeto via `≡ Projetos` ou `⭐ Recentes`:
 
 ---
 
-### 🔲 Fase 9.1 — Refinamento de Inteligência (Inteligência Avançada)
+### ✅ Fase 9.1 — Refinamento de Inteligência (Segurança e Validação)
 
 *Objetivo: Escalonar economia de contexto (Tokens) e validação resiliente (Self-Correction).*
 
-1. **Otimização Extrema de Contexto:** Filtragem cirúrgica de dependências e truncamento flexível de README e logs; preservando a janela e cortando o Time-To-First-Token.
-2. **Resiliência Multi-Cloud (Timeout Strict):** Adicionar um `AbortController` ao sistema de cascata limitando em 8s máximos por request antes de pivotar pro próximo provedor, prevenindo o usuário de ser preso numa espera zumbi de rede (`DT-01`).
-3. **Self-Correction (Self-Healing Loop):** Se o motor falhar no parser Zod, o AI Gateway pegará o erro e reinjetará na rota original, criando um Auto-Correction de loop fechado e polindo json sujos.
+1. **Validação Quad-State UI:** Mapeamento visual reativo: `✔` (Válido), `✗` (Inválido/Ausente), `⚠` (Roxo: Cota 429), `○` (Pendente).
+2. **Resiliência Multi-Cloud (Timeout Strict):** Adicionado um `AbortController` ao sistema de `fetch()` isolando chamadas com teto máximo de 6s, prevenindo que o processo Node engasgue numa requisição pendente.
+3. **Pre-flight Health Check (`hrs init --ai`):** Interceptação reativa que previne falhas cegas contra a API, direcionando o usuário para o menu de configurações interativo automaticamente se houver problema na chave ou ausência do `.env`.
+4. **Aniquilação de "Chaves Zumbis":** Separação de I/O em `src/utils/env.ts`, varrendo memórias do `process.env` e fazendo direct disk read evitando Module Caching.
+
+---
+
+### 🔲 Fase 9.2 — Auto-Correction Zod (Self-Healing Loop)
+
+*Objetivo: Escalonar resiliência para parsing mal-estruturado do LLM.*
+1. **Self-Correction:** Se o motor de IA retornar JSON sujo ou malformado, o gateway capta o erro de parse do Zod e reinjeta na pipeline da API, consertando o próprio erro de forma invisível.
 
 ---
 
@@ -298,16 +306,20 @@ horus-cli/
 │   ├── core/
 │   │   ├── registry.ts        # CRUD + Zod + lastAccessed atômico
 │   │   ├── parser.ts          # horus.json → package.json fallback
-│   │   └── executor.ts        # Wrapper execa, stdio: inherit
+│   │   ├── executor.ts        # Wrapper execa, stdio: inherit
+│   │   └── ai-agent.ts        # Integração Multi-LLM BYOK + Discovery
 │   ├── ui/
 │   │   ├── theme.ts           # Paleta, banner, renderContextBar, waitForKeypress
 │   │   ├── badges.ts          # Badges de saúde (existsSync)
 │   │   └── prompts.ts         # Abstrações @clack/prompts
+│   ├── utils/
+│   │   └── env.ts             # Cache Bypass (I/O Síncrono direto no disco)
 │   ├── commands/
 │   │   ├── register.ts        # hrs add / list (exibição) / remove
 │   │   ├── projects.ts        # [NOVO] Project Navigator com busca textual
 │   │   ├── run.ts             # Execução de tarefas com loop stateful
-│   │   └── init.ts            # hrs init / --ai (heurística + skeleton LLM)
+│   │   ├── ai-config.ts       # Menu de Provedores de IA c/ Validação Isolada
+│   │   └── init.ts            # hrs init / --ai (Agente AI c/ preflight)
 │   └── index.ts               # Máquina de estados: HOME|PROJECTS|RUN|ADD|…|EXIT
 ├── docs/
 │   ├── PRD-Horus.md           # Este arquivo

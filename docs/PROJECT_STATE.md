@@ -18,8 +18,9 @@
 | **Fase 6** | UX Contínua e Heurísticas  | ✅ **Concluída** | 2026-03-26 |
 | **Fase 8** | Context Dashboard (V2) e Navegação UI | ✅ **Concluída** | 2026-03-26 |
 | **Fase 8.5**| Bug Bash, Navegação Híbrida e Smart Init | ✅ **Concluída** | 2026-03-26 |
+| **Fase 9.1**| Refinamento de Inteligência & Quad-Estágio | ✅ **Concluída** | 2026-03-26 |
 
-> 🎉 **Status Geral: Horus CLI estabilizado. Navegação híbrida e resilience a crash garantidos. Pronto para a IA (Fase 9).**
+> 🎉 **Status Geral: Motor de IA Integrado e resiliente. Validação BYOK (Bring Your Own Key) com cache bypass rigoroso e status quad-estágio funcionando perfeitamente. Próximo passo: Background Tasks (Fase 10) ou Auto-Correction Zod (Fase 9.2).**
 
 ---
 
@@ -171,8 +172,12 @@ hrs help               # ≡ hrs -h, hrs --help
 - **Smart Init (Fluxo de Recuperação)**: O Discovery Engine não apenas avisa quando um diretório é virgem de configuração, mas bloqueia o fluxo exibindo um prompt: `"Deseja inicializar o horus.json agora?"`. Se aceito, o CLI efetua um `cd` virtual (Context Switch seguro) e inicia o wizard interativo na raiz do novo projeto, voltando ao menu logo após a conclusão.
 - **Microcopy**: Renomeado "Registrar novo portal" para "Registrar novo projeto" para melhor clareza. Cancelamentos em sub-menus geram feedbacks pacíficos (`Registro cancelado.`, `Voltando...`).
 
-### Fase 9 (No Radar)
-- Fase 9 foca na integração genuína do esqueleto LLM já modelado em `init.ts`, para que gere arquivos `/horus.json` através do SDK de IA substituindo as heurísticas.
+### Fase 9.1 — Refinamento de Inteligência (Segurança e Validação) ✅
+
+- **Cache Bypass Otimizado (`src/utils/env.ts`)**: Módulo criado para contornar cache do Node/V8 lendo sempre o `.env` atômico em `~/.horus/.env`. Aniquilada a falha de "Chaves Zumbis" onde exclusões no disco não refletiam na UI.
+- **Status Quad-Estágio para Provedores de IA**: `✔` (Verde: Válido), `✗` (Vermelho: Inválido/Sem Conf), `⚠` (Roxo: Cota/Rate Limit), `○` (Cinza: Pendente).
+- **Tratamento Timeout Fetch**: AbortController adaptado em todos os `fetch()` de ping limitando em 6s e evitando o travamento de sistema caso Ollama não esteja rodando ou provedor na nuvem caia.
+- **Escudo AI Agent (`hrs init --ai`)**: Comando de Discovery da IA modificado para realizar pre-flight via `checkActiveProviderHealth()`. Impede requests mortas enviando o usuário automaticamente para o painel de configuração.
 
 ---
 
@@ -214,16 +219,20 @@ m:/Projetos/Horus/
 │   ├── core/
 │   │   ├── registry.ts           ✅ Fase 2/8 — CRUD + Zod + lastAccessed atômico
 │   │   ├── parser.ts             ✅ Fase 3 — Fallbacks e schemas
-│   │   └── executor.ts           ✅ Fase 4 — Wrapper execa com inherit e sinal
+│   │   ├── executor.ts           ✅ Fase 4 — Wrapper execa com inherit e sinal
+│   │   └── ai-agent.ts           ✅ Fase 9 — Integração Multi-LLM BYOK
 │   ├── ui/
 │   │   ├── theme.ts              ✅ Fase 8 — Context Bar, waitForKeypress e saudação
 │   │   ├── badges.ts             ✅ Fase 8 — Badges de Saúde lazily read
 │   │   └── prompts.ts            ✅ Fase 8.5 — isCancelled() seguro (sem process.exit)
+│   ├── utils/
+│   │   └── env.ts                ✅ Fase 9.1 — Cache Bypass e gerenciamento rigoroso de variáveis
 │   ├── commands/
 │   │   ├── register.ts           ✅ Fase 8.5 — Tratamento de erros robusto e sem crashes
 │   │   ├── run.ts                ✅ Fase 8.5 — Smart Init + Discovery fallback
 │   │   ├── projects.ts           ✅ Fase 8.5 — Navegação híbrida (Setas + Busca filtrada)
-│   │   └── init.ts               ✅ Fase 6 — Init interativo + --ai heurístico
+│   │   ├── ai-config.ts          ✅ Fase 9.1 — I/O tri-state, timeout fetch, revalidação bypass
+│   │   └── init.ts               ✅ Fase 9.1 — Pre-flight health check no `--ai`
 │   └── index.ts                  ✅ Fase 8.5 — Máquina de Estados Absoluta (Call Stack)
 ├── docs/
 │   ├── PRD-Horus.md              ✅ Requisitos do produto

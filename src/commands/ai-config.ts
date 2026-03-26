@@ -25,14 +25,13 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { theme } from '../ui/theme.js';
 import { wasCancelled } from '../ui/prompts.js';
-
-// ─── Constantes ───────────────────────────────────────────────────────────────
-
-/** Diretório global do Horus no HOME do usuário */
-const HORUS_HOME = path.join(os.homedir(), '.horus');
-
-/** Caminho do .env global (nunca salvo em repo local) */
-const GLOBAL_ENV_PATH = path.join(HORUS_HOME, '.env');
+import { 
+  HORUS_HOME, 
+  GLOBAL_ENV_PATH, 
+  readGlobalEnvMap, 
+  upsertEnvVar, 
+  clearInternalState 
+} from '../utils/env.js';
 
 // ─── Tipos de Status ──────────────────────────────────────────────────────────
 
@@ -210,7 +209,13 @@ async function validateApiKey(provider: ProviderDef, apiKey: string): Promise<Pr
         return { status: 'valid' }; // fallback seguro
     }
 
-    const res = await fetch(url, options);
+    const res = await Promise.race([
+      fetch(url, options),
+      new Promise<never>((_, rej) => {
+        // Fallback robusto se o AbortController falhar no fetch
+        setTimeout(() => rej(new Error('Timeout')), 6000);
+      })
+    ]);
 
     if (res.ok || res.status === 200) {
       return { status: 'valid' };
@@ -269,6 +274,11 @@ export async function handleAiConfig(): Promise<void> {
 
   // ─── Loop de configuração ─────────────────────────────────────────────
   while (true) {
+    if (!fs.existsSync(GLOBAL_ENV_PATH)) {
+      clearInternalState();
+      writeStatusMap(new Map());
+    }
+
     const existingEnv = readGlobalEnvMap();
     const statusCache = readStatusMap();
 
@@ -300,20 +310,20 @@ export async function handleAiConfig(): Promise<void> {
         }
         case 'invalid': {
           statusIcon = theme.error('✗');
-          labelText = theme.warn(p.label);
-          hintText = theme.error(state.errorMsg ?? 'Chave inválida');
+          labelText = theme.error(p.label);
+          hintText = theme.error(state.errorMsg ?? '(Chave inválida)');
           break;
         }
         case 'quota_exceeded': {
           statusIcon = theme.purple('⚠');
           labelText = theme.purple(p.label);
-          hintText = theme.purple(state.errorMsg ?? 'Cota excedida / Rate Limit');
+          hintText = theme.purple(state.errorMsg ?? '(Cota excedida de modelo)');
           break;
         }
         default: {
-          statusIcon = theme.error('✗');
-          labelText = theme.error(p.label);
-          hintText = theme.error('Pendente') + theme.muted(` — ${p.hint}`);
+          statusIcon = theme.muted('○');
+          labelText = theme.muted(p.label);
+          hintText = theme.muted('Pendente') + theme.muted(` — ${p.hint}`);
           break;
         }
       }
@@ -371,19 +381,37 @@ export async function handleAiConfig(): Promise<void> {
       const s = clack.spinner();
       s.start(theme.muted('Validando chaves contra os provedores...'));
 
+      if (!fs.existsSync(GLOBAL_ENV_PATH)) {
+        clearInternalState();
+        writeStatusMap(new Map());
+        s.stop(theme.error('✗ Arquivo .env global não encontrado.'));
+        clack.note(
+          theme.warn('Configurações globais não encontradas. Por favor, reconfigure seus provedores.'),
+          theme.error('Arquivo Ausente')
+        );
+        continue;
+      }
+
+      // Limpa cache da sessão para refletir .env nativo
+      clearInternalState();
       const envMap = readGlobalEnvMap();
       let validCount = 0;
       let invalidCount = 0;
 
-      for (const p of PROVIDERS) {
-        if (!hasProviderKey(p, envMap)) continue;
-
+      const promises = PROVIDERS.map(async (p) => {
+        if (!hasProviderKey(p, envMap)) return;
         const keyValue = p.value === 'ollama' ? 'local' : (envMap.get(p.envKey) || process.env[p.envKey] || '');
         const result = await validateApiKey(p, keyValue);
         setProviderStatus(p.value, result.status, result.errorMsg);
+        return result;
+      });
 
-        if (result.status === 'valid') validCount++;
-        else invalidCount++;
+      const results = await Promise.allSettled(promises);
+      for (const res of results) {
+        if (res.status === 'fulfilled' && res.value) {
+          if (res.value.status === 'valid') validCount++;
+          else invalidCount++;
+        }
       }
 
       s.stop(
@@ -559,27 +587,6 @@ export async function handleAiConfig(): Promise<void> {
 
 // ─── Helpers de Status ────────────────────────────────────────────────────────
 
-/** Lê o .env global e retorna um Map<chave, valor> */
-function readGlobalEnvMap(): Map<string, string> {
-  const map = new Map<string, string>();
-  if (!fs.existsSync(GLOBAL_ENV_PATH)) return map;
-
-  try {
-    const content = fs.readFileSync(GLOBAL_ENV_PATH, 'utf-8');
-    for (const line of content.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eqIdx = trimmed.indexOf('=');
-      if (eqIdx === -1) continue;
-      const key = trimmed.slice(0, eqIdx).trim();
-      const val = trimmed.slice(eqIdx + 1).trim();
-      // String vazia = chave inexistente (Zod-like strictness)
-      if (val && val.length > 0) map.set(key, val);
-    }
-  } catch { /* silencioso */ }
-  return map;
-}
-
 /** Verifica se um provedor possui chave API presente (não vazia) */
 function hasProviderKey(
   provider: ProviderDef,
@@ -592,60 +599,48 @@ function hasProviderKey(
   return fromEnv.length >= 8; // chaves reais sempre têm 8+ caracteres
 }
 
-// ─── Utilitários de .env ──────────────────────────────────────────────────────
+
+
+// ─── Health Check Integrado ───────────────────────────────────────────────────
 
 /**
- * Insere ou atualiza uma variável no conteúdo do .env.
- * Não utiliza bibliotecas externas — parsing manual line-by-line.
+ * Invoca a verificação do provedor ativo antes da inicialização com Agent.
+ * Retorna ok: true se há um provedor ativo e validado como 'valid'.
  */
-function upsertEnvVar(content: string, key: string, value: string): string {
-  const lines = content.split(/\r?\n/);
-  const regex = new RegExp(`^${key}\\s*=`);
-  const newLine = `${key}=${value}`;
-
-  let found = false;
-  const updated = lines.map((line) => {
-    if (regex.test(line)) {
-      found = true;
-      return newLine;
-    }
-    return line;
-  });
-
-  if (!found) {
-    const trimmed = updated.filter((l) => l.trim() !== '' || updated.indexOf(l) < updated.length - 1);
-    trimmed.push(newLine);
-    return trimmed.join('\n') + '\n';
+export async function checkActiveProviderHealth(): Promise<{ ok: boolean; status?: ProviderStatus; errorMsg?: string; label?: string }> {
+  if (!fs.existsSync(GLOBAL_ENV_PATH)) {
+    clearInternalState();
+    writeStatusMap(new Map());
+    return { ok: false, errorMsg: 'Nenhum provedor de IA configurado (arquivo ~.horus/.env ausente)' };
   }
 
-  return updated.join('\n');
-}
-
-// ─── Loader do .env Global ────────────────────────────────────────────────────
-
-/**
- * Carrega as variáveis do ~/.horus/.env para process.env.
- * Chamado no boot do Horus. Silencioso se o arquivo não existir.
- */
-export function loadGlobalEnv(): void {
-  if (fs.existsSync(GLOBAL_ENV_PATH)) {
-    try {
-      const content = fs.readFileSync(GLOBAL_ENV_PATH, 'utf-8');
-      for (const line of content.split(/\r?\n/)) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) continue;
-
-        const eqIdx = trimmed.indexOf('=');
-        if (eqIdx === -1) continue;
-
-        const key = trimmed.slice(0, eqIdx).trim();
-        const val = trimmed.slice(eqIdx + 1).trim();
-
-        // Não sobrescreve se já estiver definida (prioridade: env do SO > .env global)
-        if (!process.env[key] && val.length > 0) {
-          process.env[key] = val;
-        }
+  // Força re-leitura do env físico garantindo que não estamos pegando cache
+  clearInternalState();
+  const envMap = readGlobalEnvMap();
+  
+  // IMPORTANTE: Repovoar process.env para que o ai-agent consuma as chaves
+  const { loadGlobalEnv } = await import('../utils/env.js');
+  loadGlobalEnv();
+  
+  for (const pValue of ['ollama', 'openrouter', 'groq', 'gemini']) {
+    const p = PROVIDERS.find(x => x.value === pValue)!;
+    if (hasProviderKey(p, envMap)) {
+      const keyValue = p.value === 'ollama' ? 'local' : (envMap.get(p.envKey) || process.env[p.envKey] || '');
+      const result = await validateApiKey(p, keyValue);
+      
+      // Salva atomicamente para os logs / UI reagir
+      setProviderStatus(p.value, result.status, result.errorMsg);
+      
+      const ret: { ok: boolean; status?: ProviderStatus; errorMsg?: string; label?: string } = {
+        ok: result.status === 'valid', 
+        status: result.status, 
+        label: p.label 
+      };
+      if (result.errorMsg !== undefined) {
+        ret.errorMsg = result.errorMsg;
       }
-    } catch { /* Silencioso */ }
+      return ret;
+    }
   }
+  return { ok: false, errorMsg: 'Nenhum provedor de IA configurado no ~/.horus/.env' };
 }

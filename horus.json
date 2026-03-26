@@ -1,36 +1,53 @@
 {
-  "name": "Horus CLI",
-  "description": "The All-Seeing Gateway — Navigate and run project commands without memorization.",
+  "name": "Horus",
+  "description": "Gerado pelo horus (heurística local) — stack: Node.js",
   "tasks": [
     {
-      "label": "📦 Start Dev Watch",
+      "label": "👁️  Watch Mode",
       "cmd": "npm run dev",
-      "hint": "Inicia o modo de desenvolvimento com observação de arquivos.",
+      "hint": "tsup --watch",
       "group": "Desenvolvimento"
     },
     {
-      "label": "📦 Build Project",
+      "label": "🏗️  Build",
       "cmd": "npm run build",
-      "hint": "Compila o projeto para produção.",
+      "hint": "tsup",
       "group": "Build"
     },
     {
-      "label": "📦 Type Check",
+      "label": "🔍 Typecheck",
       "cmd": "npm run typecheck",
-      "hint": "Verifica erros de tipo no código TypeScript.",
-      "group": "Testes"
+      "hint": "tsc --noEmit",
+      "group": "Qualidade"
     },
     {
-      "label": "📦 Start Application",
+      "label": "🚀 Iniciar",
       "cmd": "npm run start",
-      "hint": "Inicia a aplicação Horus CLI.",
+      "hint": "node dist/bin/horus.js",
       "group": "Desenvolvimento"
     },
     {
-      "label": "📦 Run Linter",
+      "label": "🔍 Lint",
       "cmd": "npm run lint",
-      "hint": "Executa o linter para verificar a qualidade do código.",
-      "group": "Testes"
+      "hint": "tsc --noEmit",
+      "group": "Qualidade"
+    },
+    {
+      "label": "🌱 Git: Status",
+      "cmd": "git status",
+      "group": "Git"
+    },
+    {
+      "label": "🌱 Git: Pull",
+      "cmd": "git pull",
+      "hint": "Atualiza o repositório",
+      "group": "Git"
+    },
+    {
+      "label": "🌱 Git: Log",
+      "cmd": "git log --oneline -10",
+      "hint": "Últimos 10 commits",
+      "group": "Git"
     }
   ]
 }

@@ -37,7 +37,7 @@ const __bundleDir = url.fileURLToPath(new URL('.', import.meta.url));
 dotenv.config({ path: path.resolve(__bundleDir, '..', '.env') });
 
 // Carrega .env GLOBAL do Horus (~/.horus/.env) — chaves BYOK do usuário
-import { loadGlobalEnv } from './commands/ai-config.js';
+import { loadGlobalEnv } from './utils/env.js';
 loadGlobalEnv();
 
 import * as clack from '@clack/prompts';

@@ -232,7 +232,27 @@ async function runInteractiveInit(cwd: string, outPath: string): Promise<void> {
  */
 async function runAiInit(cwd: string, outPath: string): Promise<void> {
   const s = clack.spinner();
-  s.start(theme.muted('🤖 Conectando ao AI Discovery Agent (Gemini)…'));
+  s.start(theme.muted('🤖 Verificando integridade do Provedor de IA...'));
+
+  // Validação Ativa Prévio ao Init (Impede chamadas com chave morta ou 429)
+  const { checkActiveProviderHealth, handleAiConfig } = await import('./ai-config.js');
+  const health = await checkActiveProviderHealth();
+
+  if (!health.ok) {
+    s.stop(theme.error(`✗ Falha na verificação de IA: ${health.errorMsg || 'Não configurado'}`));
+    
+    if (health.status === 'quota_exceeded') {
+      clack.log.warn(theme.purple(`⚠ Cota excedida no provedor ${health.label}: ${health.errorMsg}`));
+    } else if (health.status === 'invalid') {
+      clack.log.error(theme.error(`✗ Chave inválida no provedor ${health.label}: ${health.errorMsg}`));
+    }
+
+    clack.log.info(theme.accent('Redirecionando automaticamente para configuração de IA...'));
+    await handleAiConfig();
+    return;
+  }
+
+  s.message(theme.muted('🤖 Conectando ao AI Discovery Agent...'));
 
   // Lazy-import: garante que o SDK de IA não infle o bundle de boot (RNF2)
   const { runAiDiscovery } = await import('../core/ai-agent.js');
