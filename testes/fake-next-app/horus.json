@@ -1,0 +1,77 @@
+{
+  "name": "fake-next-app",
+  "description": "Gerado pelo horus IA Agent — stack: Next.js + Prisma",
+  "tasks": [
+    {
+      "label": "👁️  Watch Mode",
+      "cmd": "npm run dev",
+      "hint": "next dev",
+      "group": "Desenvolvimento"
+    },
+    {
+      "label": "🏗️  Build",
+      "cmd": "npm run build",
+      "hint": "next build",
+      "group": "Build"
+    },
+    {
+      "label": "🚀 Iniciar",
+      "cmd": "npm run start",
+      "hint": "next start",
+      "group": "Desenvolvimento"
+    },
+    {
+      "label": "🔍 Lint",
+      "cmd": "npm run lint",
+      "hint": "eslint src",
+      "group": "Qualidade"
+    },
+    {
+      "label": "🔍 Typecheck",
+      "cmd": "npm run typecheck",
+      "hint": "tsc --noEmit",
+      "group": "Qualidade"
+    },
+    {
+      "label": "🧪 Testes",
+      "cmd": "npm run test",
+      "hint": "jest",
+      "group": "Testes"
+    },
+    {
+      "label": "🗄️  Migrar DB",
+      "cmd": "npm run migrate",
+      "hint": "prisma migrate dev",
+      "group": "Banco de Dados"
+    },
+    {
+      "label": "🎨 Studio",
+      "cmd": "npm run studio",
+      "hint": "prisma studio",
+      "group": "Banco de Dados"
+    },
+    {
+      "label": "🌱 Seed DB",
+      "cmd": "npm run seed",
+      "hint": "prisma db seed",
+      "group": "Banco de Dados"
+    },
+    {
+      "label": "🌱 Git: Status",
+      "cmd": "git status",
+      "group": "Git"
+    },
+    {
+      "label": "🌱 Git: Pull",
+      "cmd": "git pull",
+      "hint": "Atualiza o repositório",
+      "group": "Git"
+    },
+    {
+      "label": "🌱 Git: Log",
+      "cmd": "git log --oneline -10",
+      "hint": "Últimos 10 commits",
+      "group": "Git"
+    }
+  ]
+}

@@ -129,3 +129,49 @@ horus-cli/
 ├── package.json
 ├── tsup.config.ts          # Configuração do bundler
 └── tsconfig.json
+
+### Fase 6: UX Contínua e Navegação Infinita (O "Always On")
+
+*Objetivo: Transformar o Horus em uma aplicação de terminal persistente, eliminando o encerramento prematuro.*
+
+* **Loop de Sessão (State Machine):** Refatorar o `index.ts` para usar um loop (while/recursão) ou máquina de estados. Após listar projetos ou executar uma ação que não exija saída, o Horus deve retornar ao menu anterior.
+
+* **Interceptação do `ESC`:** Mapear a tecla `Escape` (ou atalhos como `Ctrl+B`) para agir como um botão "Voltar". O programa só deve ser encerrado (exit 0) se o usuário escolher "Sair" na Home ou pressionar `Ctrl+C`.
+
+* **Menu de Ajuda e Comandos:** Adicionar a seção "Ajuda / Comandos Horus" no Menu Principal, centralizando a documentação e os atalhos disponíveis.
+
+
+
+### Fase 7: Registro Dinâmico e Metadados Ricos
+
+*Objetivo: Dar inteligência e flexibilidade ao gerenciamento do Registry.*
+
+* **Registro por Caminho Personalizado:** O comando de adicionar projeto não deve se limitar ao diretório atual (`cwd`). Ele deve perguntar ativamente: *"Deseja registrar o diretório atual ou informar um caminho?"*. (Bônus: Implementar navegação de pastas via setas).
+
+* **Metadados de Projeto:** Enriquecer a listagem de projetos (`hrs ls`). Em vez de mostrar apenas o nome, exibir:
+
+    * Status/Categoria (ex: Fullstack, Mobile).
+
+    * Última vez acessado.
+
+    * Contagem de comandos disponíveis.
+
+
+
+### Fase 8: AI Discovery e Geração de Contratos
+
+*Objetivo: Facilitar a adoção do Horus eliminando a escrita manual de configurações.*
+
+* **Agente Gerador (`hrs init`):** Uma IA embutida (ou conectada via API) que analisa a árvore de arquivos do projeto (ex: detecta Dockerfile, Expo, Supabase, tsconfig).
+
+* **Criação do `horus.json` Perfeito:** O agente compila os scripts encontrados, infere descrições semânticas e gera um `horus.json` tipado, validado e categorizado automaticamente para o usuário.
+
+
+
+### Fase 6: Execução e Proxy de Logs (Fase Final)
+
+*Objetivo: Executar os comandos delegados mantendo a transparência visual.*
+
+* **Wrapper do Execa:** Executar o script escolhido.
+
+* **Herdar STDIO:** Garantir que o output do processo filho (cores, spinners) seja repassado perfeitamente para o terminal do usuário.
