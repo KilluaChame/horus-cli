@@ -221,91 +221,92 @@ async function callAiProvider(prompt: string): Promise<string> {
   }
 
   let text = '';
+  const errors: string[] = [];
 
-  if (ollamaModel) {
-    // ─── Provedor: Ollama (Offline / Local) ─────────────────────────────────
-    const host = process.env['OLLAMA_HOST'] ?? 'http://127.0.0.1:11434';
-    
+  // 1. Provedor Local (Ollama)
+  if (ollamaModel && !text) {
     try {
+      const host = process.env['OLLAMA_HOST'] ?? 'http://127.0.0.1:11434';
       const response = await fetch(`${host}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: ollamaModel,
-          prompt: prompt,
-          stream: false,
-          format: 'json',
+          prompt, stream: false, format: 'json',
           options: { temperature: 0.0 }
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`Falha HTTP Ollama: ${response.status}`);
-      }
-
+      if (!response.ok) throw new Error(`Falha Ollama HTTP: ${response.status}`);
       const data = await response.json() as { response: string };
       text = data.response;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      throw new Error(`Erro ao conectar com Ollama no localhost: ${msg}`);
+      errors.push(`[Ollama] ${(err as Error).message}`);
     }
-    
-  } else if (openRouterKey) {
-    // ─── Provedor: OpenRouter (Diversos Modelos Gratuitos e Pagos) ──────────
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openRouterKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://github.com/KilluaChame/horus-cli',
-        'X-Title': 'Horus CLI',
-      },
-      body: JSON.stringify({
-        // Utilizando Llama 3.3 70B (estável e 100% gratuito na OpenRouter)
-        model: 'meta-llama/llama-3.3-70b-instruct:free',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0,
-        response_format: { type: 'json_object' }
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Falha HTTP OpenRouter: ${response.status} - ${await response.text()}`);
-    }
-
-    const data = await response.json() as { choices: Array<{ message: { content: string } }> };
-    text = data.choices?.[0]?.message?.content ?? '{}';
-
-  } else if (groqKey) {
-    // ─── Provedor: Groq (Llama 3 Rápido) ────────────────────────────────────
-    const { Groq } = await import('groq-sdk');
-    const groq = new Groq({ apiKey: groqKey });
-    
-    const completion = await groq.chat.completions.create({
-      messages: [{ role: 'user', content: prompt }],
-      model: 'llama-3.1-8b-instant',
-      response_format: { type: 'json_object' },
-      temperature: 0,
-    });
-    
-    text = completion.choices[0]?.message?.content ?? '{}';
-  } else {
-    // ─── Provedor: Google Gemini ────────────────────────────────────────────
-    const { GoogleGenerativeAI } = await import('@google/generative-ai');
-    const genAI = new GoogleGenerativeAI(geminiKey!);
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
-      generationConfig: {
-        responseMimeType: 'application/json',
-        temperature: 0,
-      },
-    });
-
-    const result = await model.generateContent(prompt);
-    text = result.response.text();
   }
 
-  // Remove possível wrapper de markdown inserido pelo LLM
+  // 2. Provedor Nuvem (OpenRouter)
+  if (openRouterKey && !text) {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openRouterKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://github.com/KilluaChame/horus-cli',
+          'X-Title': 'Horus CLI',
+        },
+        body: JSON.stringify({
+          model: 'meta-llama/llama-3.3-70b-instruct:free',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0,
+          response_format: { type: 'json_object' }
+        }),
+      });
+      if (!response.ok) throw new Error(`Falha OpenRouter HTTP: ${response.status} - ${await response.text()}`);
+      const data = await response.json() as { choices: Array<{ message: { content: string } }> };
+      text = data.choices?.[0]?.message?.content ?? '';
+    } catch (err) {
+      errors.push(`[OpenRouter] ${(err as Error).message}`);
+    }
+  }
+
+  // 3. Provedor Nuvem (Groq)
+  if (groqKey && !text) {
+    try {
+      const { Groq } = await import('groq-sdk');
+      const groq = new Groq({ apiKey: groqKey });
+      const completion = await groq.chat.completions.create({
+        messages: [{ role: 'user', content: prompt }],
+        model: 'llama-3.1-8b-instant',
+        response_format: { type: 'json_object' },
+        temperature: 0,
+      });
+      text = completion.choices[0]?.message?.content ?? '';
+    } catch (err) {
+      errors.push(`[Groq] ${(err as Error).message}`);
+    }
+  }
+
+  // 4. Provedor Nuvem (Gemini)
+  if (geminiKey && !text) {
+    try {
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(geminiKey);
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-2.0-flash',
+        generationConfig: { responseMimeType: 'application/json', temperature: 0 },
+      });
+      const result = await model.generateContent(prompt);
+      text = result.response.text();
+    } catch (err) {
+      errors.push(`[Gemini] ${(err as Error).message}`);
+    }
+  }
+
+  if (!text) {
+    throw new Error('Todos os provedores configurados falharam em responder.\n' + errors.join('\n'));
+  }
+
   return text
     .replace(/^```(?:json)?\s*/m, '')
     .replace(/\s*```\s*$/m, '')
