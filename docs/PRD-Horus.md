@@ -259,6 +259,8 @@ Ao entrar em um projeto via `≡ Projetos` ou `⭐ Recentes`:
 1. **Document Viewer (`hrs readme`):** Algoritmo nativo de renderização Markdown incorporado no terminal, respeitando margens da interface Clack. Utilizado para inspecionar `README.md` dos projetos.
 2. **Sistema de Prompts (`~/.horus/prompts/`):** CRUD acoplado que permite gerenciar e reaproveitar System Prompts no Agent local usando o mesmo Document Viewer.
 3. **Deep Link Init:** Atalho `⚙️ Configurar Provedor de IA` flui inteligentemente (sem renderizar root options desnecessárias) focando especificamente nas integrações BYOK.
+4. **Clipboard System (V5):** Utilitário dinâmico utilizando `execa` acoplado ao motor do Windows (`chcp 65001 + clip`), MacOS e Linux previnindo "Paste As Markdown" acidental e garantindo formatação idêntica UTF-8.
+5. **Edição Atômica (V5):** Integração segura de arquivos acionando o `$EDITOR` ou `$VISUAL` (vscode ou nano) isolando os conteúdos na RAM e em arquivos `.tmp` provisórios, validando nativamente pelo `execa` sem travar o cli e substituindo o original com `renameSync` somente no fechamento da janela com sucesso.
 
 ---
 

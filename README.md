@@ -145,7 +145,11 @@ O fluxo recomendado é puramente visual (digite apenas `horus` e siga na interfa
 | `horus config` | `hrs config` | | Acesso rápido pelo Deep Link para configuração BYOK (Provedores de IA). |
 
 ### 📖 Central de Documentação e Prompts (Novo)
-O Horus unifica a leitura de referências do seu projeto reproduzindo um renderizador nativo de **Markdown** no seu terminal (estilo IDE). Podendo ser usado para ler o `README.md` do seu projeto em tempo real com formatações ou instanciar e visualizar seus System Prompts de preferência salvos globalmente em `~/.horus/prompts/`.
+O Horus unifica a leitura de referências do seu projeto reproduzindo um renderizador nativo de **Markdown** no seu terminal (estilo IDE). Podendo ser usado para ler o `README.md` do seu projeto em tempo real com formatações ou instanciar e visualizar seus System Prompts de preferência salvos globalmente em `~/.horus/prompts/`. 
+
+Além da leitura dinâmica, o módulo conta com:
+- **Clipboard UTF-8 Cross-platform:** Cópia instantânea garantindo indentação real sem acionar quebras de linhas acidentais em IDEs como o VS Code (Smart Paste bypass).
+- **Editor Atômico Integrado:** Opção de disparar o `$EDITOR` global do PC congelando o fluxo para se editar nativamente e comutando arquivos de forma transacional usando `.tmp` + `renameSync` pra nunca perverter seu arquivo em caso de shutdown da janela!
 
 ---
 

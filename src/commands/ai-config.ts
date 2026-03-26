@@ -262,6 +262,11 @@ async function validateApiKey(provider: ProviderDef, apiKey: string): Promise<Pr
 // ─── Editores Externos ───────────────────────────────────────────────────────
 
 async function openEditor(filePath: string): Promise<void> {
+  // Lógica Atômica (Leitura rigorosa e isolada)
+  const currentContent = fs.readFileSync(filePath, 'utf-8');
+  const tmpPath = `${filePath}.tmp`;
+  fs.writeFileSync(tmpPath, currentContent, 'utf-8');
+  
   // Fallback inteligente de editores
   let editor = process.env['EDITOR'] || process.env['VISUAL'];
   
@@ -280,10 +285,24 @@ async function openEditor(filePath: string): Promise<void> {
 
   clack.log.info(theme.muted(`Abrindo no editor: ${editor}... Se não abrir, configure $EDITOR`));
   try {
-    spawnSync(editor, [filePath], { stdio: 'inherit', shell: true });
-    clack.log.success(theme.success('Edição finalizada.'));
+    const { execaSync } = await import('execa');
+    execaSync(editor, [tmpPath], { stdio: 'inherit', shell: true });
+    
+    // Ler o .tmp após o fechamento do subprocesso
+    if (fs.existsSync(tmpPath)) {
+      const newContent = fs.readFileSync(tmpPath, 'utf-8');
+      
+      // Regra G4: Se leu perfeitamente, comite a transação
+      if (typeof newContent === 'string') {
+        fs.renameSync(tmpPath, filePath);
+        clack.log.success(theme.success('Edição salva e validada com segurança (Commit Atômico).'));
+      }
+    }
   } catch (err) {
-    clack.log.error(theme.error(`Não foi possível abrir o editor: ${editor}.`));
+    clack.log.error(theme.error(`Não foi possível completar a edição no editor: ${editor}.`));
+    if (fs.existsSync(tmpPath)) {
+      fs.unlinkSync(tmpPath); // Limpa o vestígio sujo em caso de falha
+    }
   }
 }
 
@@ -441,6 +460,7 @@ async function manageSinglePrompt(filename: string, promptStorage: any): Promise
     const action = await clack.select({
       message: theme.primary(`⚙️  Gerenciar Prompt: ${theme.accent(filename)}`),
       options: [
+        { value: 'copy', label: `${theme.white('📋')}  Copiar Prompt` },
         { value: 'edit', label: `${theme.accent('✏️')}  Editar Prompt` },
         { value: 'delete', label: `${theme.error('🗑️')}  Deletar Prompt` },
         { value: 'back', label: `${theme.muted('←')}  Voltar` }
@@ -449,7 +469,33 @@ async function manageSinglePrompt(filename: string, promptStorage: any): Promise
 
     if (wasCancelled(action) || action === 'back') return;
 
-    if (action === 'edit') {
+    if (action === 'copy') {
+      try {
+        const rawContent = fs.readFileSync(filePath, 'utf-8');
+        const { execaSync } = await import('execa');
+        
+        if (process.platform === 'darwin') {
+          execaSync('pbcopy', [], { input: rawContent });
+        } else if (process.platform === 'win32') {
+          // Utiliza cmd orginal com chcp 65001 (UTF-8) passando input direto via stdin 
+          // O execa garante que a Stream transborde perfeitamente para o Pipe sem ser quebrada
+          // por wrappers do Node v8 e o CRLF do Windows é normalizado
+          const normalizedContent = rawContent.replace(/\r?\n/g, '\r\n');
+          execaSync('cmd.exe', ['/c', 'chcp 65001 >NUL && clip'], { input: normalizedContent });
+        } else {
+          // Fallback Linux
+          try {
+             execaSync('xclip', ['-selection', 'clipboard'], { input: rawContent });
+          } catch {
+             execaSync('xsel', ['--clipboard', '--input'], { input: rawContent });
+          }
+        }
+        
+        clack.log.success(theme.success('Prompt copiado com sucesso! 📋'));
+      } catch (err) {
+        clack.log.error(theme.error('Erro ao utilizar o clipboard do sistema operacional.'));
+      }
+    } else if (action === 'edit') {
       const filePath = path.join(promptStorage.PROMPTS_DIR, filename);
        await openEditor(filePath);
     } else if (action === 'delete') {

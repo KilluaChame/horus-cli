@@ -185,6 +185,7 @@ hrs help               # ≡ hrs -h, hrs --help
 - **Document Viewer (`hrs readme`)**: Algoritmo nativo de renderização Markdown colorida e formatada com quebra inteligente de linha no terminal, casando perfeitamente com a UI do `@clack/prompts`.
 - **Motor de Prompts Interativo**: Prompts gerais locados universalmente em `~/.horus/prompts/` renderizados e gerenciados via terminal, substituindo a velha edição por strings puras.
 - **Deep Link `Init`**: O Roteamento foi otimizado para navegações diretas caso IA não esteja configurada (`manageProviders`), saltando overhead de submenus.
+- **Motor de Cópia e Editor Atômico (V5)**: Integração nativa robusta com `pbcopy`, `clip` (via `chcp 65001`) e `xclip` utilizando a StdIn do `execa` garantindo 100% de compatibilidade UTF-8 nas quebras de linha. O `openEditor` também se tornou Transacional e Atômico com _Rollbacks_ eficientes caso o sistema do usuário congele (`.tmp` → `renameSync`).
 
 ---
 
