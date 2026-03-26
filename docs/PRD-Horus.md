@@ -254,6 +254,14 @@ Ao entrar em um projeto via `≡ Projetos` ou `⭐ Recentes`:
 
 ---
 
+### ✅ Fase 9.5 — Documentação Rica e Templates Globais
+
+1. **Document Viewer (`hrs readme`):** Algoritmo nativo de renderização Markdown incorporado no terminal, respeitando margens da interface Clack. Utilizado para inspecionar `README.md` dos projetos.
+2. **Sistema de Prompts (`~/.horus/prompts/`):** CRUD acoplado que permite gerenciar e reaproveitar System Prompts no Agent local usando o mesmo Document Viewer.
+3. **Deep Link Init:** Atalho `⚙️ Configurar Provedor de IA` flui inteligentemente (sem renderizar root options desnecessárias) focando especificamente nas integrações BYOK.
+
+---
+
 ### 🔲 Fase 9.2 — Auto-Correction Zod (Self-Healing Loop)
 
 *Objetivo: Escalonar resiliência para parsing mal-estruturado do LLM.*

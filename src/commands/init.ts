@@ -235,7 +235,7 @@ async function runAiInit(cwd: string, outPath: string): Promise<void> {
   s.start(theme.muted('🤖 Verificando integridade do Provedor de IA...'));
 
   // Validação Ativa Prévio ao Init (Impede chamadas com chave morta ou 429)
-  const { checkActiveProviderHealth, handleAiConfig } = await import('./ai-config.js');
+  const { checkActiveProviderHealth } = await import('./ai-config.js');
   const health = await checkActiveProviderHealth();
 
   if (!health.ok) {

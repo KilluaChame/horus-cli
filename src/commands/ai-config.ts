@@ -391,17 +391,53 @@ async function managePrompts(): Promise<void> {
 async function manageSinglePrompt(filename: string, promptStorage: any): Promise<void> {
   const filePath = path.join(promptStorage.PROMPTS_DIR, filename);
 
-  if (fs.existsSync(filePath)) {
-    try {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      clack.note(
-        theme.muted(content.trim().slice(0, 1000) + (content.length > 1000 ? '\n\n...' : '')),
-        theme.primary(`📄 ${filename}`)
-      );
-    } catch { /* silent */ }
-  }
-
   while (true) {
+    if (fs.existsSync(filePath)) {
+      try {
+        const rawContent = fs.readFileSync(filePath, 'utf-8').trim();
+        const sizeKB = (Buffer.byteLength(rawContent, 'utf-8') / 1024).toFixed(1);
+        const termWidth = process.stdout.columns || 80;
+        const maxLineLength = Math.max(termWidth - 5, 20);
+
+        clack.log.info(theme.primary(`📄 ${filename} (${sizeKB} KB)`));
+        console.log(theme.muted('│'));
+
+        if (rawContent.length === 0) {
+          console.log(`${theme.muted('│')}   ${theme.muted('Este prompt está vazio. Clique em Editar para adicionar instruções.')}`);
+        } else {
+          const rawLines = rawContent.split(/\r?\n/);
+          
+          for (const rawLine of rawLines) {
+            let chunks: string[] = [];
+            if (rawLine.length === 0) {
+              chunks.push('');
+            } else {
+              let currentIndex = 0;
+              while (currentIndex < rawLine.length) {
+                chunks.push(rawLine.slice(currentIndex, currentIndex + maxLineLength));
+                currentIndex += maxLineLength;
+              }
+            }
+
+            chunks.forEach((chunk) => {
+              let printChunk = chunk
+                .replace(/^(#{1,6})\s+(.*)/, (match, hashes, text) => `${theme.muted(hashes)} ${theme.success(text)}`)
+                .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, txt, url) => `${theme.white(txt)}(${theme.accent(url)})`)
+                .replace(/`([^`]+)`/g, (match, code) => theme.primary(code));
+              
+              console.log(`${theme.muted('│')}   ${printChunk}`);
+            });
+          }
+        }
+
+        console.log(theme.muted('│'));
+        console.log(theme.muted('╰──────────────────────────────────────────────────────────'));
+      } catch { /* erro silent */ }
+    } else {
+      // Se não existir mais, sai do loop
+      return;
+    }
+
     const action = await clack.select({
       message: theme.primary(`⚙️  Gerenciar Prompt: ${theme.accent(filename)}`),
       options: [

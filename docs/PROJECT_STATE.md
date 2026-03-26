@@ -19,8 +19,9 @@
 | **Fase 8** | Context Dashboard (V2) e Navegação UI | ✅ **Concluída** | 2026-03-26 |
 | **Fase 8.5**| Bug Bash, Navegação Híbrida e Smart Init | ✅ **Concluída** | 2026-03-26 |
 | **Fase 9.1**| Refinamento de Inteligência & Quad-Estágio | ✅ **Concluída** | 2026-03-26 |
+| **Fase 9.5**| Documentação Rica e Templates Globais | ✅ **Concluída** | 2026-03-26 |
 
-> 🎉 **Status Geral: Motor de IA Integrado e resiliente. Validação BYOK (Bring Your Own Key) com cache bypass rigoroso e status quad-estágio funcionando perfeitamente. Próximo passo: Background Tasks (Fase 10) ou Auto-Correction Zod (Fase 9.2).**
+> 🎉 **Status Geral: Motor de IA Integrado, Markdown dinâmico sincronizado via Clack. Validação BYOK com cache bypass estruturada, Status visual de chaves e visualizador local (`~/.horus/prompts/`). Próximo passo: Background Tasks (Fase 10) ou Auto-Correction Zod (Fase 9.2).**
 
 ---
 
@@ -178,6 +179,12 @@ hrs help               # ≡ hrs -h, hrs --help
 - **Status Quad-Estágio para Provedores de IA**: `✔` (Verde: Válido), `✗` (Vermelho: Inválido/Sem Conf), `⚠` (Roxo: Cota/Rate Limit), `○` (Cinza: Pendente).
 - **Tratamento Timeout Fetch**: AbortController adaptado em todos os `fetch()` de ping limitando em 6s e evitando o travamento de sistema caso Ollama não esteja rodando ou provedor na nuvem caia.
 - **Escudo AI Agent (`hrs init --ai`)**: Comando de Discovery da IA modificado para realizar pre-flight via `checkActiveProviderHealth()`. Impede requests mortas enviando o usuário automaticamente para o painel de configuração.
+
+### Fase 9.5 — Documentação Rica e Templates Globais ✅
+
+- **Document Viewer (`hrs readme`)**: Algoritmo nativo de renderização Markdown colorida e formatada com quebra inteligente de linha no terminal, casando perfeitamente com a UI do `@clack/prompts`.
+- **Motor de Prompts Interativo**: Prompts gerais locados universalmente em `~/.horus/prompts/` renderizados e gerenciados via terminal, substituindo a velha edição por strings puras.
+- **Deep Link `Init`**: O Roteamento foi otimizado para navegações diretas caso IA não esteja configurada (`manageProviders`), saltando overhead de submenus.
 
 ---
 

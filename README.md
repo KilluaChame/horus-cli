@@ -44,6 +44,87 @@ Tudo interceptado velozmente para apresentar as "Tasks" formatadas e contextuali
 ### 🧠 AI Agent (`hrs init --ai`)
 Não quer escrever seu contrato `horus.json` à mão? Nós também não. O motor de **Smart Init** possui uma heurística multi-provider (Ollama ➔ OpenRouter ➔ Groq ➔ Gemini) que lê seus arquivos, escaneia seu README e utiliza inteligência artificial para inferir, categorizar e gerar um arquivo de tarefas blindado e validado em Zod. Menos digitação, zero fricção.
 
+**Exemplo gerado automaticamente por IA para um projeto Next.js + Prisma:**
+```json
+{
+  "name": "fake-next-app",
+  "description": "Gerado pelo horus IA Agent — stack: Next.js + Prisma",
+  "tasks": [
+    {
+      "label": "👁️  Watch Mode",
+      "cmd": "npm run dev",
+      "hint": "next dev",
+      "group": "Desenvolvimento"
+    },
+    {
+      "label": "🏗️  Build",
+      "cmd": "npm run build",
+      "hint": "next build",
+      "group": "Build"
+    },
+    {
+      "label": "🚀 Iniciar",
+      "cmd": "npm run start",
+      "hint": "next start",
+      "group": "Desenvolvimento"
+    },
+    {
+      "label": "🔍 Lint",
+      "cmd": "npm run lint",
+      "hint": "eslint src",
+      "group": "Qualidade"
+    },
+    {
+      "label": "🔍 Typecheck",
+      "cmd": "npm run typecheck",
+      "hint": "tsc --noEmit",
+      "group": "Qualidade"
+    },
+    {
+      "label": "🧪 Testes",
+      "cmd": "npm run test",
+      "hint": "jest",
+      "group": "Testes"
+    },
+    {
+      "label": "🗄️  Migrar DB",
+      "cmd": "npm run migrate",
+      "hint": "prisma migrate dev",
+      "group": "Banco de Dados"
+    },
+    {
+      "label": "🎨 Studio",
+      "cmd": "npm run studio",
+      "hint": "prisma studio",
+      "group": "Banco de Dados"
+    },
+    {
+      "label": "🌱 Seed DB",
+      "cmd": "npm run seed",
+      "hint": "prisma db seed",
+      "group": "Banco de Dados"
+    },
+    {
+      "label": "🌱 Git: Status",
+      "cmd": "git status",
+      "group": "Git"
+    },
+    {
+      "label": "🌱 Git: Pull",
+      "cmd": "git pull",
+      "hint": "Atualiza o repositório",
+      "group": "Git"
+    },
+    {
+      "label": "🌱 Git: Log",
+      "cmd": "git log --oneline -10",
+      "hint": "Últimos 10 commits",
+      "group": "Git"
+    }
+  ]
+}
+```
+
 ### ⚡ Performance Extrema & Fidedignidade
 - **Boot < 300ms:** Arquitetura de compilação modular usando *Lazy Loading*. O motor de IA e as bibliotecas pesadas só entram na memória caso sejam estritamente necessárias.
 - **Transparência Executiva:** O Horus usa a engine transacional do Execa associada ao `stdio: 'inherit'`. O output que você vê da execução da task, os warnings em vermelho e a barra de carregamento do compilador original são mantidos intactos, repassados perfeitamente com todas as cores ANSI nativas. O comando executa como se o Horus não estivesse lá.
@@ -61,6 +142,10 @@ O fluxo recomendado é puramente visual (digite apenas `horus` e siga na interfa
 | `horus list` | `hrs ls` | | Abre a interface de visualização, filtragem e switch de projetos salvos. |
 | `horus remove` | `hrs rm` | `--purge` | Abre menu para remover projeto do catálogo (ou limpa atalhos com paths inválidos). |
 | `horus init` | `hrs init` | `--ai`, `--prompt` | Cria um template inicial do contrato abstrato de automações local. |
+| `horus config` | `hrs config` | | Acesso rápido pelo Deep Link para configuração BYOK (Provedores de IA). |
+
+### 📖 Central de Documentação e Prompts (Novo)
+O Horus unifica a leitura de referências do seu projeto reproduzindo um renderizador nativo de **Markdown** no seu terminal (estilo IDE). Podendo ser usado para ler o `README.md` do seu projeto em tempo real com formatações ou instanciar e visualizar seus System Prompts de preferência salvos globalmente em `~/.horus/prompts/`.
 
 ---
 

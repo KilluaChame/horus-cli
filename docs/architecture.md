@@ -208,10 +208,11 @@ import * as clack from '@clack/prompts';
 | ADR-04 | Strict TypeScript com `exactOptionalPropertyTypes` | ✅ Aceito |
 | ADR-05 | Escrita atômica via `.tmp` → `renameSync` | ✅ Aceito |
 | ADR-06 | Zod inlinhado no bundle | ✅ Aceito |
-| ADR-07 | Auto-limpeza lazy do registry | ✅ Aceito |
+| ADR-07 | Auto-limgação lazy do registry | ✅ Aceito |
+| ADR-08 | Markdown Rendering Engine Manual via Clack | ✅ Aceito |
 
-Para detalhes completos de cada ADR, consulte [fase1_implementacao.md](./fase1_implementacao.md)
-e [fase2_implementacao.md](../brain/fase2_implementacao.md).
+Para detalhes completos de cada ADR, consulte `fase1_implementacao.md`
+e as atas correspondentes na API History.
 
 ---
 
