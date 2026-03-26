@@ -192,10 +192,10 @@ async function handleReadmeCommand(): Promise<void> {
       ? content.slice(0, MAX_DISPLAY).trimEnd() + '\n\n' + theme.muted(`… (truncado em ${MAX_DISPLAY} chars — use "cat ${readmeFile.name}" para o completo)`)
       : content.trim() || '(README vazio)';
 
-    clack.note(
-      display,
-      theme.primary(`📖 ${readmeFile.name} (${(content.length / 1024).toFixed(1)} KB)`),
-    );
+    clack.log.info(theme.primary(`📖 ${readmeFile.name} (${(content.length / 1024).toFixed(1)} KB)`));
+    console.log(theme.muted('  ' + '─'.repeat(60)));
+    console.log(theme.white(display));
+    console.log(theme.muted('  ' + '─'.repeat(60)));
 
     // Espera o usuário ler
     await clack.text({

@@ -331,10 +331,12 @@ async function runPromptExport(cwd: string): Promise<void> {
   
   s.stop(theme.success('📋 Prompt para Geração de horus.json finalizado com sucesso!'));
   
-  clack.note(
-    theme.muted(promptRaw),
-    theme.primary('Copie o texto abaixo e cole no ChatGPT, Claude, Cursor ou Windsurf')
-  );
+  console.log();
+  clack.log.info(theme.primary('Copie o texto abaixo e cole no ChatGPT, Claude, Cursor ou Windsurf'));
+  console.log(theme.muted('  ' + '─'.repeat(40)));
+  console.log(theme.white(promptRaw));
+  console.log(theme.muted('  ' + '─'.repeat(40)));
+  console.log();
   
   clack.log.info(theme.accent('↑ Acima está todo o contexto mapeado do projeto!'));
   clack.log.info(theme.muted('Cole no seu Chatbot preferido, ele gerará o horus.json instantaneamente para você.'));
