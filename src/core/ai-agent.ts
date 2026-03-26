@@ -102,8 +102,8 @@ export function scanRepository(cwd: string): string {
   if (readmePath) {
     try {
       const readme = fs.readFileSync(path.join(cwd, readmePath), 'utf-8');
-      const snippet = readme.slice(0, 300).replace(/\n/g, ' '); // Pega só um resumo sem quebrar
-      lines.push(`[README] ${snippet}...`);
+      const snippet = readme.slice(0, 2500); // Passamos até 2500 chars do README real
+      lines.push(`[README EXTRACT]\n${snippet}\n[END README]`);
     } catch { /* Ignora erro ao ler README */ }
   }
 

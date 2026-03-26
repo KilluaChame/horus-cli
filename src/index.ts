@@ -29,6 +29,7 @@
 
 import * as path from 'node:path';
 import * as url from 'node:url';
+import * as fs from 'node:fs';
 import * as dotenv from 'dotenv';
 
 // Carrega .env da raiz do projeto (relativo ao bundle compilado em dist/)
@@ -64,6 +65,7 @@ type AppState =
   | 'LIST'
   | 'REMOVE'
   | 'INIT'
+  | 'README'
   | 'HELP'
   | 'EXIT';
 
@@ -167,6 +169,41 @@ function showHelp(): void {
   );
 }
 
+async function handleReadmeCommand(): Promise<void> {
+  const cwd = process.cwd();
+  try {
+    const entries = fs.readdirSync(cwd, { withFileTypes: true });
+    const readmeFile = entries.find((e) => e.isFile() && e.name.toLowerCase().startsWith('readme.md'));
+    
+    if (!readmeFile) {
+      clack.log.warn(theme.warn('Nenhum arquivo README.md encontrado neste diretório.'));
+      // Press any key to continue
+      await clack.text({
+        message: theme.muted('▶ Pressione Enter para voltar ao menu...'),
+      });
+      return;
+    }
+
+    const content = fs.readFileSync(path.join(cwd, readmeFile.name), 'utf-8');
+    
+    // Mostra o README renderizado em modo Note
+    clack.note(
+      content.trim() || '(README vazio)',
+      theme.primary(`📖 ${readmeFile.name}`),
+    );
+
+    // Espera o usuário ler
+    await clack.text({
+      message: theme.muted('▶ Pressione Enter para voltar ao menu...'),
+    });
+  } catch (err) {
+    clack.log.error(theme.error(`Falha ao ler o diretório/README: ${String(err)}`));
+    await clack.text({
+      message: theme.muted('▶ Pressione Enter para voltar ao menu...'),
+    });
+  }
+}
+
 function showInlineHelp(): void {
   clack.note(
     [
@@ -226,7 +263,7 @@ async function showInteractiveMenu(): Promise<void> {
 
       // ── Opções do menu — spec exata do PRD ──────────────────────────────
       type MenuValue =
-        | 'recent' | 'projects' | 'run' | 'add' | 'list' | 'remove' | 'init' | 'help' | 'exit';
+        | 'recent' | 'projects' | 'run' | 'add' | 'list' | 'remove' | 'init' | 'readme' | 'help' | 'exit';
 
       const menuOptions: Array<{ value: MenuValue; label: string; hint?: string }> = [
         {
@@ -258,6 +295,11 @@ async function showInteractiveMenu(): Promise<void> {
           value: 'init',
           label: `${theme.accent('✦')}  Inicializar horus.json`,
           hint: 'Configuração flexível',
+        },
+        {
+          value: 'readme',
+          label: `${theme.white('📖')}  Ler README do Projeto`,
+          hint: 'Visualiza o README.md local',
         },
         {
           value: 'help',
@@ -296,6 +338,7 @@ async function showInteractiveMenu(): Promise<void> {
         list:    'LIST',
         remove:  'REMOVE',
         init:    'INIT',
+        readme:  'README',
         help:    'HELP',
         exit:    'EXIT',
       };
@@ -338,6 +381,11 @@ async function showInteractiveMenu(): Promise<void> {
       case 'INIT':
         // Fase 9: Menu visual agora sempre dispara a experiência Inteligente (--ai)
         await handleInitCommand(['--ai']);
+        appState = 'HOME';
+        break;
+        
+      case 'README':
+        await handleReadmeCommand();
         appState = 'HOME';
         break;
 
