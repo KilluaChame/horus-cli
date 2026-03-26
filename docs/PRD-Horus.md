@@ -234,24 +234,57 @@ Ao entrar em um projeto via `≡ Projetos` ou `⭐ Recentes`:
 
 ---
 
-### 🔲 Fase 9 — AI Discovery e Geração de Contratos
+### ✅ Fase 9 — AI Discovery e Geração de Contratos
 
-*Objetivo: Substituir a heurística local do `hrs init --ai` por um SDK de IA real.*
-
-- **Agente Gerador (`hrs init --ai`):** Conecta a um SDK (Google Gemini / OpenAI / Anthropic) via variável de ambiente `HORUS_AI_KEY`
-- **Análise da árvore de arquivos:** Detecta `Dockerfile`, `expo.json`, `supabase/`, `tsconfig`, `Cargo.toml`, `pyproject.toml`, etc.
-- **Geração do `horus.json` Perfeito:** Labels semânticos, grupos de comandos, hints descritivos — tudo validado pelo schema Zod antes de escrever
-- **Prompt de sistema** já documentado em `src/commands/init.ts` como DocBlock — pronto para ser plugado
+- **Agente Gerador (`hrs init --ai`):** Conecta a um SDK (Google Gemini / OpenAI / Anthropic / Groq / Ollama / OpenRouter) via var de ambiente no `.env`.
+- **Análise da árvore de arquivos:** Detecta `Dockerfile`, `package.json`, `.NET Solutions`, `.py`, `Executáveis`. Extrai scripts chaves localmente.
+- **Smart Fallback Engine:** Resiliência garantida por rotas em cascata lidando com Rate Limiting e rede offline.
+- **Integração Prompt-Export:** Opção inovadora de visualização e cópia do Contexto gerado e prompt das Diretrizes (exportável para ChatGPT/Cursor/Windsurf).
 
 ---
 
-### 🔲 Fase 10 — Execução em Segundo Plano (Background/Parallel)
+### 🔲 Fase 9.1 — Refinamento de Inteligência (Inteligência Avançada)
 
-*Objetivo: Permitir que o Horus fique aberto enquanto um processo longo roda.*
+*Objetivo: Escalonar economia de contexto (Tokens) e validação resiliente (Self-Correction).*
 
-- Ao executar um comando longo (ex: `npm run dev`), perguntar: *"Deseja manter o Horus em segundo plano?"*
-- Se sim: processo filho é detachado, logs são repassados, `Ctrl+C` encerra apenas o filho e retorna ao menu
-- Implementação via `execa` com `detached: true` + pipe manual de stdout/stderr
+1. **Otimização Extrema de Contexto:** Filtragem cirúrgica de dependências e truncamento flexível de README e logs; preservando a janela e cortando o Time-To-First-Token.
+2. **Resiliência Multi-Cloud (Timeout Strict):** Adicionar um `AbortController` ao sistema de cascata limitando em 8s máximos por request antes de pivotar pro próximo provedor, prevenindo o usuário de ser preso numa espera zumbi de rede (`DT-01`).
+3. **Self-Correction (Self-Healing Loop):** Se o motor falhar no parser Zod, o AI Gateway pegará o erro e reinjetará na rota original, criando um Auto-Correction de loop fechado e polindo json sujos.
+
+---
+
+### 🔲 Fase 10 — Execução em Segundo Plano (Detached Mode)
+
+*Objetivo: Ligar o Horus em paralelo aos serviços essenciais da aplicação sem travar a interface da Máquina de Estados.*
+
+1. **Tarefas Background e Detached Run:** Criação da keyword `"background": true` no contrato para scripts imensos.
+2. **Gestão do Daemon de Processos:** Visualização interativa na Home dos processos rodando nativamente na máquina (`node server.js` ou containers ativos abertos).
+3. **Graceful Terminate:** Kill-pipes integrados pra liberar as portas sem reiniciar o sistema agressivamente.
+
+---
+
+### 🔲 Fase 11 — Telemetria, Segurança e Variáveis de Ambiente Vaulted
+
+*Objetivo: Integrar os contêineres e aplicações com um cofre de banco chaves-valores locado estritamente no Host OS do desenvolvedor.*
+
+1. **Secure Keychain Vault (`hrs vault`):** Ramo conectado à OS Vault API Local (Windows Credential / Mac Keychain) evitando chaves no Disco Limpo.
+2. **Agentic Secrets Injections:** Repassa as injetáveis das chaves locais pros Scripts das Tasks dinamicamente, evitando configuração manual de `.env` perdidos.
+
+---
+
+### 🔲 Fase 12 — Workflows em Cascata (Macro-Tarefas)
+
+*Objetivo: Interligação e criação de Scripts Multi-Stack na mesma Interface.*
+
+1. **Compound Tasks no `horus.json`:** Possibilitar a junção linear de execução de Tasks dependentes ou Concorrentes via flag `"dependsOn" : ["build", "lint"]`.
+2. **Auto-Cleanups:** Gatilhos reativos de falhas com "Fallback Scripts" (limpeza de DBs, desligar Containers filhos, caso falhe o parent-task).
+
+---
+
+### 🔲 Fase 13 — Hub Remoto & Extensões Globais (The All-Seeing Gateway Final)
+
+1. **Hubs Nativos e Plugins (NPM Linkeds):** Extensão modular da plataforma pra integrar utilitários abertos em Go, Rust ou NextJs (como SDKs em CLI nativas plugáveis na máquina de estados do Horus).
+2. **Cloud Project Sharing:** Permitir exportar/importar metadados do `registry.json` nativo para Cloud/Gist sync de multi-dev stations corporativos.
 
 ---
 
