@@ -2,13 +2,13 @@
  * index.ts — Entrypoint do sistema horus.
  *
  * Responsabilidades:
- *   - Parsing de argv (hrs add, hrs list, hrs remove)
+ *   - Parsing de argv (hrs add, hrs list, hrs remove, hrs run)
  *   - Menu interativo principal (quando invocado sem subcomando)
  *   - Orquestração de banner e saudação
  *
  * ⚡ Regra de performance: NENHUM I/O acontece antes do banner.
- *    O registry é carregado LAZY — apenas quando o usuário seleciona
- *    uma ação que precisa dele.
+ *    Registry e parser são carregados LAZY — apenas quando o usuário
+ *    seleciona uma ação que precisa deles.
  */
 
 import * as clack from '@clack/prompts';
@@ -19,6 +19,7 @@ import {
   handleListCommand,
   handleRemoveCommand,
 } from './commands/register.js';
+import { handleRunCommand } from './commands/run.js';
 
 // ─── Argv Parser (leve, sem dependência) ─────────────────────────────────────
 
@@ -46,6 +47,13 @@ function parseArgv(): ParsedArgs {
  */
 async function handleSubcommand(parsed: ParsedArgs): Promise<boolean> {
   switch (parsed.command) {
+    case 'run': {
+      renderBanner();
+      await handleRunCommand();
+      clack.outro(theme.muted('👁️  horus encerrado. Até a próxima!'));
+      return true;
+    }
+
     case 'add':
     case 'register': {
       renderBanner();
@@ -89,6 +97,7 @@ function showHelp(): void {
     `  ${theme.primary('COMANDOS DISPONÍVEIS:')}`,
     '',
     `    ${theme.accent('hrs')}                    Menu interativo principal`,
+    `    ${theme.accent('hrs run')}                Descobre e executa tarefas do projeto`,
     `    ${theme.accent('hrs add')} ${theme.muted('[path]')}        Registra um projeto (padrão: diretório atual)`,
     `    ${theme.accent('hrs list')}               Lista projetos registrados`,
     `    ${theme.accent('hrs remove')}             Remove projeto do registro`,
@@ -100,9 +109,10 @@ function showHelp(): void {
     '',
     `  ${theme.primary('EXEMPLOS:')}`,
     '',
+    `    ${theme.muted('$')} hrs                    ${theme.muted('# Menu interativo')}`,
+    `    ${theme.muted('$')} hrs run                ${theme.muted('# Descobre tarefas do projeto atual')}`,
     `    ${theme.muted('$')} hrs add .              ${theme.muted('# Registra o projeto do diretório atual')}`,
     `    ${theme.muted('$')} hrs add ~/projetos/api ${theme.muted('# Registra um projeto específico')}`,
-    `    ${theme.muted('$')} hrs                    ${theme.muted('# Abre o menu interativo')}`,
     '',
   ];
 
@@ -158,11 +168,7 @@ async function showInteractiveMenu(): Promise<void> {
 
   switch (action) {
     case 'run':
-      clack.note(
-        `${theme.muted('Discovery Engine ainda não implementado.')}\n` +
-        `${theme.muted('→ Será ativado na')} ${theme.accent('Fase 3')}.`,
-        theme.primary('🔮 Em breve'),
-      );
+      await handleRunCommand();
       break;
 
     case 'add':

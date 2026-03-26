@@ -1,0 +1,41 @@
+{
+  "name": "Horus CLI",
+  "description": "The All-Seeing Gateway — Dev workflow",
+  "tasks": [
+    {
+      "label": "👁️  Watch Mode",
+      "cmd": "npm run dev",
+      "hint": "Rebuild automático ao salvar arquivos",
+      "group": "Desenvolvimento"
+    },
+    {
+      "label": "🏗️  Build",
+      "cmd": "npm run build",
+      "hint": "Bundle minificado em dist/",
+      "group": "Desenvolvimento"
+    },
+    {
+      "label": "🔍 Typecheck",
+      "cmd": "npm run typecheck",
+      "hint": "Verifica tipos sem compilar",
+      "group": "Qualidade"
+    },
+    {
+      "label": "🌱 Git: Status",
+      "cmd": "git status",
+      "group": "Git"
+    },
+    {
+      "label": "🚀 Git: Commit e Push",
+      "cmd": "git add . && git commit -m \"chore: update\" && git push",
+      "hint": "Atenção: commita tudo!",
+      "group": "Git"
+    },
+    {
+      "label": "🔬 Ver Logs do Bundle",
+      "cmd": "node dist/bin/horus.js help | head -20",
+      "hint": "Verifica saída do binário compilado",
+      "group": "Debug"
+    }
+  ]
+}
