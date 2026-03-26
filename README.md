@@ -53,15 +53,24 @@ npx horus-cli run
 
 O Horus possui uma interface de linha de comando baseada em menu interativo e opções diretas.
 
-### 1. `hrs run` (Ou apenas `hrs`)
-Descobre o projeto atual e apresenta um menu listando todas as tarefas disponíveis. Caso você não esteja numa pasta de projeto válida, ele permitirá que você escolha um projeto da sua lista global de projetos registrados.
+### 1. Navegação Baseada no Contexto (Dashboard V2)
+Descobre o projeto atual e apresenta um menu listando todas as tarefas disponíveis. O menu é reativo, contínuo e operado puramente via TTY.
 
-Você pode inclusive passar **flags adicionais** que serão passadas diretamente ao processo filho:
+Características Principais:
+- **⭐ Mais Acessados**: Atalhos inteligentes no menu que ordenam projetos com base no heurístico de acesso (`lastAccessed`).
+- **≡ Projetos (Navegação Híbrida)**: Em vez de ficar perdido pelo terminal, liste e filtre (fuzzy search) dezenas de projetos via UI, ou role neles nativamente via Setas. O Horus permite que você faça de forma transparente um **Contextual Switch** (`cd` virtual).
+
+Você pode inclusive acionar e passar flags em um só passo:
 ```bash
 hrs run -- --watch
 ```
 
-### 2. Gerenciamento de Projetos Globais (`Registry`)
+### 2. Fluxo Smart Init 
+Ao deparar-se com projetos sem utilidades registradas (sem `package.json` limpo nem `horus.json`), o motor exibe um fallback de conversão na hora:
+`⚠ Nenhum parser detectou scripts... Deseja inicializar o horus.json agora?`
+Se sim, o CLI invoca a Engine de Criação que prepara sua base de forma segura.
+
+### 3. Gerenciamento de Projetos Globais (`Registry`)
 
 O Horus pode "lembrar" onde seus projetos estão salvos no seu PC. Você pode executá-los de volta de **qualquer diretório** do seu sistema.
 
@@ -110,7 +119,8 @@ Se não houver um `horus.json` ou se ele estiver malformado, o Horus não entra 
 
 Para não atrasar a vida do desenvolvedor, o Horus foi montado com métricas extremas de otimização:
 
-- **Boot Super Fino (`< 300ms`)**: Módulos não essenciais (como o próprio `parser` do Discovery Engine e o `execa`) sofrem _Lazy Load_ extremo. Só vão pra memória quando a UI precisa deles.
+- **Boot Super Fino (`< 300ms`)**: Módulos não essenciais (como o próprio `parser` do Discovery Engine e o `execa`) sofrem _Lazy Load_ extremo. Só vão pra memória quando a UI precisa deles, independentemente das heurísticas de UI híbrida listadas acima.
+- **Stateful Loop (Zero-Exit)**: O CLI usa o seu próprio _Call Stack_ assíncrono como motor de _Navigation Stack_. Isso garante estabilidade a todo teste. `Ctrl-C` cancela _aquela_ tela, sem encerramentos abruptos de todo o daemon.
 - **`stdio: 'inherit'` via Execa**: Ferramentas modernas do NPM como Vite, Next e Expo pintam progresso no terminal direto. O Horus usa multiplexação pura que injeta esse TTY pass-through na sua CLI original. Dá até para fechar com o popular `Ctrl+C` perfeitamente!
 - **Zero Crashes**: Processamento de arquivos com a engine do `Zod v4`. Se o formatador pegar erro humano no JSON, ele converte em aviso visual não bloqueante.
 

@@ -1,5 +1,5 @@
 /**
- * registry.ts — CRUD do ~/.horus/registry.json
+ * registry.ts — CRUD do ~/.horus/registry.json (Fase 8)
  *
  * Responsável pelo mapa global de projetos do horus.
  * Princípios de design:
@@ -37,6 +37,8 @@ const ProjectSchema = z.object({
   name: z.string().min(1, 'Nome do projeto não pode estar vazio'),
   path: z.string().min(1, 'Caminho do projeto não pode estar vazio'),
   addedAt: z.string().datetime({ message: 'addedAt deve ser um ISO timestamp válido' }),
+  /** Última vez que o projeto foi acessado/executado via horus */
+  lastAccessed: z.string().datetime().optional(),
 });
 
 /**
@@ -211,7 +213,7 @@ export function addProject(options: AddProjectOptions): AddProjectResult {
   registry.projects.push(project);
   saveRegistry(registry);
 
-  return { success: true, project };
+  return { success: true, project: { ...project } };
 }
 
 // ─── Remover projeto ─────────────────────────────────────────────────────────
@@ -286,6 +288,45 @@ export function purgeInvalidProjects(): PurgeResult {
   }
 
   return { removed, remaining };
+}
+
+// ─── Toque de acesso (lastAccessed) ─────────────────────────────────────────
+
+/**
+ * Atualiza o timestamp `lastAccessed` de um projeto identificado pelo caminho.
+ * Usada toda vez que o usuário acessa ou executa um comando num projeto.
+ *
+ * Escrita atômica: tmp → renameSync (regra de ouro).
+ * @returns true se encontrou e atualizou, false se o projeto não está no registry.
+ */
+export function touchProject(projectPath: string): boolean {
+  const registry = loadRegistry();
+  const normalizedTarget = normalizePath(path.resolve(projectPath));
+
+  const project = registry.projects.find(
+    (p) => normalizePath(p.path) === normalizedTarget,
+  );
+
+  if (!project) return false;
+
+  project.lastAccessed = new Date().toISOString();
+  saveRegistry(registry);
+  return true;
+}
+
+/**
+ * Retorna os N projetos mais recentemente acessados.
+ * Projetos sem `lastAccessed` ficam no final (ordenados por `addedAt`).
+ */
+export function getRecentProjects(limit = 3): readonly Project[] {
+  const registry = loadRegistry();
+  return [...registry.projects]
+    .sort((a, b) => {
+      const aTime = a.lastAccessed ?? a.addedAt;
+      const bTime = b.lastAccessed ?? b.addedAt;
+      return new Date(bTime).getTime() - new Date(aTime).getTime();
+    })
+    .slice(0, limit);
 }
 
 // ─── Utilitários ─────────────────────────────────────────────────────────────

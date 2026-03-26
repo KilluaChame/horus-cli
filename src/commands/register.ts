@@ -16,11 +16,13 @@ import {
   removeProject,
   purgeInvalidProjects,
   getRegistryPath,
+  touchProject,
   type Project,
 } from '../core/registry.js';
 import { discoverTasksWithFallback } from '../core/parser.js';
 import { theme } from '../ui/theme.js';
-import { wasCancelled, handleCancel } from '../ui/prompts.js';
+import { wasCancelled } from '../ui/prompts.js';
+import { getProjectHealth, formatProjectLabel, renderHealthBadges } from '../ui/badges.js';
 
 // ─── Comando ADD ─────────────────────────────────────────────────────────────
 
@@ -98,7 +100,9 @@ export async function handleAddCommand(targetPath?: string): Promise<void> {
       });
 
       if (wasCancelled(manualInput)) {
-        handleCancel();
+        // Não chama process.exit() — apenas retorna ao HOME
+        clack.log.info(theme.muted('Registro cancelado.'));
+        return;
       }
 
       resolvedPath = path.resolve((manualInput as string).trim());
@@ -131,7 +135,9 @@ export async function handleAddCommand(targetPath?: string): Promise<void> {
   });
 
   if (wasCancelled(nameInput)) {
-    handleCancel();
+    // Não chama process.exit() — retorna silenciosamente ao HOME
+    clack.log.info(theme.muted('Registro cancelado.'));
+    return;
   }
 
   const name = (nameInput as string).trim();
@@ -197,18 +203,23 @@ export async function handleListCommand(): Promise<void> {
     return;
   }
 
-  // Enriquece com metadados do Discovery Engine
+  // Enriquece com metadados do Discovery Engine + Badges de Saúde
   const enrichedLines = remaining.map((p, i) => {
     const index    = theme.muted(`${String(i + 1).padStart(2)}.`);
+    const health   = getProjectHealth(p.path);
+    const badges   = renderHealthBadges(health);
     const name     = theme.accent(p.name);
     const dirPath  = theme.muted(p.path);
     const addedAt  = formatRelativeDate(p.addedAt);
+    const lastSeen = p.lastAccessed
+      ? `  ${theme.muted('·')}  🕒 acessado ${theme.muted(formatRelativeDate(p.lastAccessed))}`
+      : '';
     const taskInfo = getTaskCount(p.path);
 
     return [
-      `${index} ${name}`,
+      `${index} ${name}  ${badges}`,
       `   ${theme.muted('📂')} ${dirPath}`,
-      `   ${theme.muted('🕐')} Registrado ${theme.muted(addedAt)}  ${theme.muted('·')}  ${taskInfo}`,
+      `   ${theme.muted('🕐')} Registrado ${theme.muted(addedAt)}${lastSeen}  ${theme.muted('·')}  ${taskInfo}`,
     ].join('\n');
   });
 
@@ -299,16 +310,18 @@ export async function selectRegisteredProject(): Promise<Project | null> {
     message: theme.primary('Selecione um projeto:'),
     options: remaining.map((p) => ({
       value: p.path,
-      label: `${theme.accent(p.name)}`,
+      label: formatProjectLabel(p.name, getProjectHealth(p.path)),
       hint: p.path,
     })),
   });
 
   if (wasCancelled(selected)) {
-    handleCancel();
+    // Não chama process.exit() — retorna ao chamador
+    return null;
   }
 
   const selectedPath = selected as string;
+  touchProject(selectedPath);
   return remaining.find((p) => p.path === selectedPath) ?? null;
 }
 

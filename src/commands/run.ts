@@ -1,11 +1,12 @@
 /**
- * run.ts — Lógica principal de execução interativa (Fase 3 + Fase 4)
+ * run.ts — Lógica principal de execução interativa (Fase 8)
  *
  * Orquestra o fluxo completo:
  *   1. Detecta o projeto alvo (cwd ou seleção do registry)
  *   2. Roda o Discovery Engine (parser.ts)
  *   3. Apresenta o menu de tarefas via @clack/prompts
  *   4. Delega ao Executor Proxy (executor.ts) com stdio: 'inherit'
+ *   5. Após execução, pausa com waitForKeypress() e volta ao menu de tarefas
  *
  * Regra de performance: este módulo é importado LAZILY no index.ts
  * (só quando o usuário escolhe "Executar" no menu principal).
@@ -15,10 +16,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as clack from '@clack/prompts';
 import { discoverTasksWithFallback, type Task } from '../core/parser.js';
-import { purgeInvalidProjects } from '../core/registry.js';
+import { purgeInvalidProjects, touchProject } from '../core/registry.js';
 import { executeCommand, reportExecutionResult } from '../core/executor.js';
-import { theme } from '../ui/theme.js';
-import { wasCancelled, handleCancel } from '../ui/prompts.js';
+import { theme, waitForKeypress } from '../ui/theme.js';
+import { wasCancelled } from '../ui/prompts.js';
+import { handleInitCommand } from './init.js';
 
 // ─── Handler principal ────────────────────────────────────────────────────────
 
@@ -31,8 +33,7 @@ export async function handleRunCommand(extraArgs: string[] = []): Promise<void> 
   const projectPath = await resolveProjectPath();
 
   if (!projectPath) {
-    // Usuário cancelou ou não há projetos — handleCancel() já foi chamado
-    return;
+    return; // Usuário cancelou ou sem projetos disponíveis
   }
 
   // 2. Discovery Engine — lê horus.json ou package.json
@@ -51,20 +52,32 @@ export async function handleRunCommand(extraArgs: string[] = []): Promise<void> 
     );
   }
 
-  // 4. Trata falha total de discovery
+  // 4. Falha total do Discovery Engine — aciona Smart Init
   if (!result.ok) {
-    clack.log.error(theme.error(`✗ ${result.message}`));
+    clack.log.warn(theme.warn(`⚠  ${result.message}`));
 
-    // Sugere próximos passos ao usuário
-    clack.note(
-      [
-        `${theme.muted('Opções disponíveis:')}`,
-        `  ${theme.accent('1.')} Crie um ${theme.bold('horus.json')} na raiz do projeto`,
-        `  ${theme.accent('2.')} Adicione scripts ao ${theme.bold('package.json')} do projeto`,
-        `  ${theme.accent('3.')} Registre outro projeto com ${theme.bold('hrs add <path>')}`,
-      ].join('\n'),
-      theme.primary('Como configurar'),
-    );
+    const shouldInit = await clack.confirm({
+      message: theme.primary('Deseja inicializar o horus.json agora?'),
+      initialValue: true,
+    });
+
+    if (!wasCancelled(shouldInit) && shouldInit === true) {
+      // Redireciona para o wizard de init (muda cwd para o projeto primeiro)
+      const prevCwd = process.cwd();
+      if (prevCwd !== projectPath) {
+        try { process.chdir(projectPath); } catch { /* ignora — init tentativo */ }
+      }
+      await handleInitCommand([]);
+    } else {
+      clack.note(
+        [
+          `  ${theme.accent('1.')} Crie um ${theme.bold('horus.json')} na raiz do projeto`,
+          `  ${theme.accent('2.')} Adicione ${theme.bold('scripts')} ao ${theme.bold('package.json')}`,
+          `  ${theme.accent('3.')} Ou registre outro projeto com ${theme.bold('hrs add <path>')}`,
+        ].join('\n'),
+        theme.primary('📖 Como configurar'),
+      );
+    }
     return;
   }
 
@@ -72,35 +85,36 @@ export async function handleRunCommand(extraArgs: string[] = []): Promise<void> 
   await showTaskMenu(result.projectName, result.tasks, result.source, projectPath, extraArgs);
 }
 
-// ─── Resolução do projeto alvo ────────────────────────────────────────────────
+// ─── Resolução do projeto alvo ─────────────────────────────────────────────
 
 /**
  * Determina o projeto alvo:
  *   1. Se o cwd está registrado no registry → usa automaticamente
- *   2. Se há projetos registrados → abre menu de seleção
- *   3. Se não há projetos → sugere `hrs add .`
+ *   2. Se o cwd possui horus.json ou package.json → usa cwd diretamente
+ *   3. Se há projetos registrados → abre menu de seleção
+ *   4. Se não há projetos → sugere `hrs add .`
  *
  * @returns Caminho absoluto do projeto, ou null se o usuário cancelou.
  */
 async function resolveProjectPath(): Promise<string | null> {
   const cwd = process.cwd();
 
-  // Verifica se o diretório atual está no registry
   const { remaining } = purgeInvalidProjects();
   const cwdNormalized = normalizePath(cwd);
   const cwdProject = remaining.find(
     (p) => normalizePath(p.path) === cwdNormalized,
   );
 
-  // Caso 1: cwd está registrado — usa diretamente (zero interação)
+  // Caso 1: cwd está registrado — usa diretamente
   if (cwdProject) {
     clack.log.info(
       theme.muted(`📁 Projeto detectado: `) + theme.accent(cwdProject.name),
     );
+    touchProject(cwd);
     return cwd;
   }
 
-  // Caso 2: cwd não está registrado, mas tem horus.json ou package.json → usa cwd
+  // Caso 2: cwd tem config local → usa cwd sem registrar
   const hasCwdConfig =
     fs.existsSync(path.join(cwd, 'horus.json')) ||
     fs.existsSync(path.join(cwd, 'package.json'));
@@ -127,52 +141,55 @@ async function resolveProjectPath(): Promise<string | null> {
     return null;
   }
 
-  // Menu de seleção de projeto
+  // Menu de seleção de projeto com badges
+  const options = remaining.map((p) => ({
+    value: p.path,
+    label: theme.accent(p.name),
+    hint:  p.path,
+  }));
+
   const selected = await clack.select({
     message: theme.primary('Selecione o projeto:'),
-    options: remaining.map((p) => ({
-      value: p.path,
-      label: theme.accent(p.name),
-      hint:  p.path,
-    })),
+    options,
   });
 
   if (wasCancelled(selected)) {
-    handleCancel();
+    return null; // Volta ao menu principal sem fechar o processo
   }
 
-  return selected as string;
+  const selectedPath = selected as string;
+  touchProject(selectedPath);
+  return selectedPath;
 }
 
-// ─── Menu de tarefas ───────────────────────────────────────────────────────────────────────
+// ─── Menu de tarefas ──────────────────────────────────────────────────────────
 
 /**
- * Exibe o menu de seleção de tarefas e aguarda a escolha do usuário.
- * Após seleção, delega ao Executor Proxy (executor.ts).
+ * Exibe o menu de seleção de tarefas.
+ * Loop interno: permite executar múltiplas tarefas sem reiniciar a CLI.
+ * Após cada execução, exibe waitForKeypress() e volta à lista de tarefas.
+ * Sair do loop: selecionar "← Voltar" ou pressionar Ctrl+C.
  */
 async function showTaskMenu(
   projectName: string,
   tasks: Task[],
   source: 'horus.json' | 'package.json',
   projectPath: string,
-  extraArgs: string[] = []
+  extraArgs: string[] = [],
 ): Promise<void> {
   const sourceLabel = source === 'horus.json'
     ? theme.success('horus.json')
     : theme.muted('package.json (fallback)');
 
-  // Cabeçalho do projeto
   clack.log.info(
-    `${theme.primary(projectName)} ${theme.muted('·')} ${sourceLabel} ${theme.muted(`· ${tasks.length} tarefa(s)`)}`
+    `${theme.primary(projectName)} ${theme.muted('·')} ${sourceLabel} ${theme.muted(`· ${tasks.length} tarefa(s)`)}`,
   );
 
-  // Loop de sessão — permite executar múltiplas tarefas sem reiniciar o CLI
   while (true) {
     const options = [
       ...tasks.map((task) => ({
         value: task.cmd,
         label: task.label,
-        // Omite hint quando undefined — exactOptionalPropertyTypes exige omissão total
         ...(task.hint !== undefined ? { hint: task.hint } : {}),
       })),
       {
@@ -181,14 +198,15 @@ async function showTaskMenu(
       },
     ];
 
-
     const selected = await clack.select({
       message: theme.primary('Qual tarefa executar?'),
       options,
     });
 
+    // Ctrl+C dentro do menu de tarefas → volta ao menu principal sem fechar o processo
     if (wasCancelled(selected)) {
-      handleCancel();
+      clack.log.info(theme.muted('Voltando ao menu principal...'));
+      break;
     }
 
     if (selected === '__back__') {
@@ -199,7 +217,6 @@ async function showTaskMenu(
     const task = tasks.find((t) => t.cmd === cmd);
     const label = task?.label ?? cmd;
 
-    // Exibe o que vai ser executado e eventuais extras
     const argsLabel = extraArgs.length > 0 ? ` ${theme.muted(extraArgs.join(' '))}` : '';
     clack.log.step(
       `${theme.success('▶')} ${theme.bold(label)}\n` +
@@ -207,30 +224,18 @@ async function showTaskMenu(
       `   ${theme.muted('cwd:')} ${theme.muted(projectPath)}`,
     );
 
-    // Delega ao Executor Proxy (Fase 4)
+    // Executa via executor proxy (stdio: 'inherit' preserva TTY e progress bars)
     const result = await executeCommand(cmd, { cwd: projectPath, extraArgs });
-
-    // Reporta resultado na UI
     reportExecutionResult(result, label);
 
-    // Após execução, pergunta se deseja continuar (loop de sessão — R5 do PRD)
-    const continueSession = await clack.confirm({
-      message: theme.primary('Deseja realizar outra operação no projeto?'),
-      initialValue: true,
-    });
-
-    if (wasCancelled(continueSession) || !continueSession) {
-      break;
-    }
+    // Aguarda keypress e volta ao loop de tarefas (não fecha o CLI)
+    await waitForKeypress();
+    // Sem break aqui → volta ao início do while e mostra o menu de tarefas novamente
   }
 }
 
-// ─── Utilitário ──────────────────────────────────────────────────────────────────────────────
+// ─── Utilitário ──────────────────────────────────────────────────────────────
 
-/**
- * Normaliza caminhos para comparação cross-platform.
- * Windows é case-insensitive; Unix é case-sensitive.
- */
 function normalizePath(p: string): string {
   const resolved = path.resolve(p).replace(/\\/g, '/');
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved;

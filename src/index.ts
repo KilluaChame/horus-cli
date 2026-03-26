@@ -1,62 +1,86 @@
 /**
- * index.ts — Entrypoint do sistema horus (Fase 6: Stateful Navigation Loop)
+ * index.ts — Entrypoint do sistema horus (Fase 8.5: Context Dashboard V2)
  *
  * Responsabilidades:
  *   - Parsing de argv (hrs add, hrs list, hrs remove, hrs run, hrs init)
- *   - Loop de sessão persistente: o menu principal nunca fecha sozinho
- *   - Apenas a opção "Sair" explícita encerra o processo
+ *   - Loop de sessão persistente baseado em Máquina de Estados
+ *   - Apenas "Sair" ou Ctrl+C na HOME encerram o processo
  *
- * ⚡ Regra de performance: NENHUM I/O acontece antes do banner.
- *    Registry e parser são carregados LAZY — apenas quando o usuário
- *    seleciona uma ação que precisa deles.
+ * ⚡ Boot < 300ms: NENHUM I/O acontece antes do banner.
+ *    Registry é carregado LAZY — só quando o usuário seleciona uma ação.
  *
- * Máquina de estados:
- *   O loop é controlado por um simples `while (running)`.
- *   Cada ação retorna ao menu principal ao concluir.
- *   Somente `action === 'exit'` seta `running = false`.
+ * Máquina de estados (Fase 8.5):
+ *   HOME        → Menu principal: Context Bar + lista de ações
+ *   RECENT      → Sub-menu "⭐ Mais Acessados" (top 5 por lastAccessed)
+ *   PROJECTS    → Sub-menu "≡ Projetos" com busca textual e cd virtual
+ *   RUN         → Execução interativa de tarefas (Discovery Engine)
+ *   ADD         → Registro de novo projeto (interativo ou argv)
+ *   LIST        → Inspeção do registry com badges e metadados
+ *   REMOVE      → Remoção de projeto com confirmação
+ *   INIT        → Wizard de inicialização do horus.json
+ *   HELP        → Tela de ajuda e atalhos
+ *   EXIT        → Encerramento gracioso (único ponto de saída)
+ *
+ * Estratégia de navegação (Navigation Stack via call stack):
+ *   HOME loop → await handler() → handler retorna → volta ao HOME
+ *   ESC/Ctrl+C em sub-telas = isCancel() → return → volta um nível
+ *   processo.exit() NUNCA é chamado em handlers — apenas em HOME config EXIT
  */
 
 import * as clack from '@clack/prompts';
-import { renderBanner, renderGreeting, theme } from './ui/theme.js';
+import * as path from 'node:path';
+import {
+  renderBanner,
+  renderGreeting,
+  renderContextBar,
+  theme,
+} from './ui/theme.js';
 import { wasCancelled } from './ui/prompts.js';
 import {
   handleAddCommand,
   handleListCommand,
   handleRemoveCommand,
 } from './commands/register.js';
-import { handleRunCommand } from './commands/run.js';
-import { handleInitCommand } from './commands/init.js';
+import { handleRunCommand }        from './commands/run.js';
+import { handleInitCommand }       from './commands/init.js';
+import { handleProjectNavigator, handleRecentProjects } from './commands/projects.js';
+import { purgeInvalidProjects }    from './core/registry.js';
 
-// ─── Argv Parser (leve, sem dependência) ─────────────────────────────────────
+// ─── Máquina de estados ───────────────────────────────────────────────────────
+
+type AppState =
+  | 'HOME'
+  | 'RECENT'
+  | 'PROJECTS'
+  | 'RUN'
+  | 'ADD'
+  | 'LIST'
+  | 'REMOVE'
+  | 'INIT'
+  | 'HELP'
+  | 'EXIT';
+
+// ─── Argv Parser (zero deps) ──────────────────────────────────────────────────
 
 interface ParsedArgs {
   command: string | null;
-  flags: string[];    // --flag ou -f
-  args: string[];     // argumentos posicionais sem --
+  flags: string[];
+  args: string[];
 }
 
-/**
- * Parser minimalista de argv. Sem dependências externas.
- * Separa flags (--watch), args posicionais e o comando principal.
- */
 function parseArgv(): ParsedArgs {
   const raw = process.argv.slice(2);
   const command = raw[0]?.startsWith('-') ? null : (raw[0] ?? null);
   const rest = command ? raw.slice(1) : raw;
-
-  const flags = rest.filter((a) => a.startsWith('-'));
-  const args  = rest.filter((a) => !a.startsWith('-'));
-
-  return { command, flags, args };
+  return {
+    command,
+    flags: rest.filter((a) => a.startsWith('-')),
+    args:  rest.filter((a) => !a.startsWith('-')),
+  };
 }
 
-// ─── Subcomandos diretos ─────────────────────────────────────────────────────
+// ─── Subcomandos diretos (one-shot, sem abrir loop) ──────────────────────────
 
-/**
- * Executa um subcomando se fornecido via argv.
- * Subcomandos diretos operam em modo one-shot (não abrem o loop).
- * @returns true se processou um subcomando, false se deve exibir o menu.
- */
 async function handleSubcommand(parsed: ParsedArgs): Promise<boolean> {
   switch (parsed.command) {
     case 'run': {
@@ -65,7 +89,6 @@ async function handleSubcommand(parsed: ParsedArgs): Promise<boolean> {
       clack.outro(theme.muted('👁️  horus encerrado. Até a próxima!'));
       return true;
     }
-
     case 'add':
     case 'register': {
       renderBanner();
@@ -73,7 +96,6 @@ async function handleSubcommand(parsed: ParsedArgs): Promise<boolean> {
       clack.outro(theme.muted('👁️  horus encerrado. Até a próxima!'));
       return true;
     }
-
     case 'list':
     case 'ls': {
       renderBanner();
@@ -81,7 +103,6 @@ async function handleSubcommand(parsed: ParsedArgs): Promise<boolean> {
       clack.outro(theme.muted('👁️  horus encerrado. Até a próxima!'));
       return true;
     }
-
     case 'remove':
     case 'rm': {
       renderBanner();
@@ -89,14 +110,12 @@ async function handleSubcommand(parsed: ParsedArgs): Promise<boolean> {
       clack.outro(theme.muted('👁️  horus encerrado. Até a próxima!'));
       return true;
     }
-
     case 'init': {
       renderBanner();
       await handleInitCommand(parsed.flags);
       clack.outro(theme.muted('👁️  horus encerrado. Até a próxima!'));
       return true;
     }
-
     case 'help':
     case '--help':
     case '-h': {
@@ -104,61 +123,57 @@ async function handleSubcommand(parsed: ParsedArgs): Promise<boolean> {
       showHelp();
       return true;
     }
-
     default:
       return false;
   }
 }
 
-// ─── Help ────────────────────────────────────────────────────────────────────
+// ─── Help ─────────────────────────────────────────────────────────────────────
 
 function showHelp(): void {
-  const lines = [
-    '',
-    `  ${theme.primary('COMANDOS DISPONÍVEIS:')}`,
-    '',
-    `    ${theme.accent('hrs')}                    Menu interativo (loop contínuo)`,
-    `    ${theme.accent('hrs run')}                Descobre e executa tarefas do projeto`,
-    `    ${theme.accent('hrs add')} ${theme.muted('[path]')}        Registra um projeto (padrão: diretório atual)`,
-    `    ${theme.accent('hrs list')}               Lista projetos registrados`,
-    `    ${theme.accent('hrs remove')}             Remove projeto do registro`,
-    `    ${theme.accent('hrs init')}               Inicializa um horus.json no projeto atual`,
-    `    ${theme.accent('hrs init --ai')}          Usa IA para gerar o horus.json ideal`,
-    `    ${theme.accent('hrs help')}               Exibe esta ajuda`,
-    '',
-    `  ${theme.primary('ALIASES:')}`,
-    '',
-    `    ${theme.muted('add → register  |  list → ls  |  remove → rm  |  horus → hrs')}`,
-    '',
-    `  ${theme.primary('EXEMPLOS:')}`,
-    '',
-    `    ${theme.muted('$')} hrs                    ${theme.muted('# Menu interativo persistente')}`,
-    `    ${theme.muted('$')} hrs run                ${theme.muted('# Descobre tarefas do projeto atual')}`,
-    `    ${theme.muted('$')} hrs run -- --watch     ${theme.muted('# Repassa a flag --watch ao comando')}`,
-    `    ${theme.muted('$')} hrs add .              ${theme.muted('# Registra o diretório atual')}`,
-    `    ${theme.muted('$')} hrs add ~/projetos/api ${theme.muted('# Registra diretório específico')}`,
-    `    ${theme.muted('$')} hrs init --ai          ${theme.muted('# Gera horus.json com IA')}`,
-    '',
-  ];
-
-  process.stdout.write(lines.join('\n') + '\n');
+  process.stdout.write(
+    [
+      '',
+      `  ${theme.primary('COMANDOS DISPONÍVEIS:')}`,
+      '',
+      `    ${theme.accent('hrs')}                    Menu interativo (loop contínuo)`,
+      `    ${theme.accent('hrs run')}                Descobre e executa tarefas do projeto`,
+      `    ${theme.accent('hrs add')} ${theme.muted('[path]')}        Registra um projeto (padrão: cwd)`,
+      `    ${theme.accent('hrs list')}               Lista projetos registrados`,
+      `    ${theme.accent('hrs remove')}             Remove projeto do registro`,
+      `    ${theme.accent('hrs init')}               Inicializa horus.json no projeto atual`,
+      `    ${theme.accent('hrs init --ai')}          IA gera o horus.json ideal`,
+      `    ${theme.accent('hrs help')}               Esta ajuda`,
+      '',
+      `  ${theme.primary('ALIASES:')}`,
+      '',
+      `    ${theme.muted('add → register  |  list → ls  |  remove → rm  |  horus → hrs')}`,
+      '',
+      `  ${theme.primary('EXEMPLOS:')}`,
+      '',
+      `    ${theme.muted('$')} hrs                    ${theme.muted('# Abre o Dashboard')}`,
+      `    ${theme.muted('$')} hrs run                ${theme.muted('# Executa tarefas do projeto atual')}`,
+      `    ${theme.muted('$')} hrs add .              ${theme.muted('# Registra o diretório atual')}`,
+      `    ${theme.muted('$')} hrs init --ai          ${theme.muted('# Gera horus.json com IA')}`,
+      '',
+    ].join('\n'),
+  );
 }
-
-// ─── Menu de Ajuda embutido (exibido inline no loop) ────────────────────────
 
 function showInlineHelp(): void {
   clack.note(
     [
       `${theme.primary('NAVEGAÇÃO')}`,
-      `  Use ${theme.accent('↑ ↓')} para navegar  ·  ${theme.accent('Enter')} para selecionar`,
-      `  Selecione ${theme.accent('"Sair"')} ou pressione ${theme.accent('Ctrl+C')} para encerrar`,
+      `  ${theme.accent('↑ ↓')}       Navegar entre opções`,
+      `  ${theme.accent('Enter')}     Selecionar`,
+      `  ${theme.accent('Ctrl+C')}    Voltar um nível  (ESC no menu HOME = confirmar saída)`,
       '',
       `${theme.primary('ATALHOS DIRETOS (sem menu)')}`,
       `  ${theme.accent('hrs run')}         → Executa tarefas do projeto atual`,
       `  ${theme.accent('hrs add .')}       → Registra o projeto atual`,
       `  ${theme.accent('hrs add [path]')}  → Registra um caminho específico`,
-      `  ${theme.accent('hrs ls')}          → Lista projetos registrados`,
-      `  ${theme.accent('hrs rm')}          → Remove projeto do registro`,
+      `  ${theme.accent('hrs ls')}          → Inspeciona o registry`,
+      `  ${theme.accent('hrs rm')}          → Remove projeto do registry`,
       `  ${theme.accent('hrs init --ai')}   → Gera horus.json com IA`,
       '',
       `${theme.primary('DISCOVERY ENGINE')}`,
@@ -169,127 +184,181 @@ function showInlineHelp(): void {
   );
 }
 
-// ─── Menu interativo principal com Loop de Sessão ────────────────────────────
+// ─── Utilitário de path ───────────────────────────────────────────────────────
+
+function normalizePath(p: string): string {
+  const resolved = path.resolve(p).replace(/\\/g, '/');
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+// ─── Menu principal — Máquina de Estados ─────────────────────────────────────
 
 async function showInteractiveMenu(): Promise<void> {
-  // 1. Banner ASCII — zero I/O antes disso
+  // 1. Banner ASCII — zero I/O antes deste render
   renderBanner();
 
-  // 2. Saudação contextual (exibida apenas uma vez)
+  // 2. Saudação uma única vez
   renderGreeting();
 
-  // 3. Loop de Sessão Infinito (Fase 6: Stateful Navigation)
-  //    O menu só fecha quando o usuário escolher explicitamente "Sair".
-  let running = true;
+  // 3. Estado inicial
+  let appState: AppState = 'HOME';
 
-  while (running) {
-    const action = await clack.select({
-      message: theme.primary('O que deseja fazer?'),
-      options: [
+  // ─── Loop principal ──────────────────────────────────────────────────────
+  while (appState !== 'EXIT') {
+
+    // ── Estado HOME: Context Bar + Menu Principal ────────────────────────
+    if (appState === 'HOME') {
+      // Lazy: lê o registry e determina o projeto do cwd
+      const { remaining } = purgeInvalidProjects();
+      const cwd     = process.cwd();
+      const cwdNorm = normalizePath(cwd);
+      const cwdProject = remaining.find((p) => normalizePath(p.path) === cwdNorm);
+
+      // Renderiza Context Bar dinâmico
+      renderContextBar(cwdProject ? { projectName: cwdProject.name } : {});
+
+      // ── Opções do menu — spec exata do PRD ──────────────────────────────
+      type MenuValue =
+        | 'recent' | 'projects' | 'run' | 'add' | 'list' | 'remove' | 'init' | 'help' | 'exit';
+
+      const menuOptions: Array<{ value: MenuValue; label: string; hint?: string }> = [
+        {
+          value: 'recent',
+          label: `${theme.accent('⭐')}  Mais Acessados`,
+          hint: 'Acesso rápido aos últimos 5 projetos utilizados',
+        },
+        {
+          value: 'projects',
+          label: `${theme.white('≡')}  Projetos  ${theme.muted('(busca por nome habilitada)')}`,
+          hint: 'Navega, filtra por texto e entra em qualquer projeto registrado',
+        },
         {
           value: 'run',
-          label: `${theme.success('▶')}  Executar comando de um projeto`,
-          hint: 'Detecta horus.json ou package.json',
+          label: `${theme.success('▶')}  Executar comando rápido`,
+          hint: 'Usa o projeto do cwd atual, ou escolhe da lista',
         },
         {
           value: 'add',
-          label: `${theme.accent('+')}  Registrar projeto`,
-          hint: 'Salva o caminho em ~/.horus/registry.json',
-        },
-        {
-          value: 'list',
-          label: `${theme.white('≡')}  Listar projetos registrados`,
-          hint: 'Todos os projetos mapeados globalmente',
+          label: `${theme.accent('+')}  Registrar novo projeto`,
+          hint: 'Pasta atual ou caminho manual (Validação FS + Zod)',
         },
         {
           value: 'remove',
-          label: `${theme.warn('−')}  Remover projeto do registro`,
-          hint: 'Desvincula sem apagar o diretório',
+          label: `${theme.warn('−')}  Remover projeto`,
+          hint: 'Desvincula sem apagar o diretório real',
         },
         {
           value: 'init',
           label: `${theme.accent('✦')}  Inicializar horus.json`,
-          hint: 'Gera o arquivo de configuração no projeto atual',
+          hint: 'Gera configuração no projeto atual (IA na Fase 9)',
         },
         {
           value: 'help',
-          label: `${theme.muted('?')}  Ajuda / Comandos`,
-          hint: 'Atalhos, discovery engine e exemplos',
+          label: `${theme.muted('?')}  Ajuda & Atalhos`,
+          hint: 'Atalhos, comandos diretos e discovery engine',
         },
         {
           value: 'exit',
           label: `${theme.muted('✕')}  Sair`,
         },
-      ],
-    });
+      ];
 
-    // Ctrl+C no menu principal → confirma saída em vez de quebrar
-    if (wasCancelled(action)) {
-      const confirmExit = await clack.confirm({
-        message: theme.warn('Deseja encerrar o horus?'),
-        initialValue: false,
+      const action = await clack.select({
+        message: theme.primary('O que deseja fazer?'),
+        options: menuOptions,
       });
 
-      if (wasCancelled(confirmExit) || confirmExit) {
-        running = false;
+      // Ctrl+C na HOME → pergunta se quer sair
+      if (wasCancelled(action)) {
+        const confirmExit = await clack.confirm({
+          message: theme.warn('Deseja encerrar o horus?'),
+          initialValue: false,
+        });
+        if (wasCancelled(confirmExit) || confirmExit === true) {
+          appState = 'EXIT';
+        }
+        continue;
       }
 
-      continue; // Volta ao topo do loop
+      // Dispatch: string lowercase → estado uppercase
+      const stateMap: Record<string, AppState> = {
+        recent:  'RECENT',
+        projects: 'PROJECTS',
+        run:     'RUN',
+        add:     'ADD',
+        list:    'LIST',
+        remove:  'REMOVE',
+        init:    'INIT',
+        help:    'HELP',
+        exit:    'EXIT',
+      };
+      appState = stateMap[action as string] ?? 'HOME';
+      continue;
     }
 
-    // ─── Dispatch por ação ───────────────────────────────────────────────────
-    switch (action) {
-      case 'run':
+    // ── Estados de Ação: cada handler await-a e retorna; appState volta a HOME ──
+    switch (appState) {
+      case 'RECENT':
+        await handleRecentProjects();
+        appState = 'HOME';
+        break;
+
+      case 'PROJECTS':
+        await handleProjectNavigator();
+        appState = 'HOME';
+        break;
+
+      case 'RUN':
         await handleRunCommand([]);
+        appState = 'HOME';
         break;
 
-      case 'add':
+      case 'ADD':
         await handleAddCommand();
+        appState = 'HOME';
         break;
 
-      case 'list':
+      case 'LIST':
         await handleListCommand();
+        appState = 'HOME';
         break;
 
-      case 'remove':
+      case 'REMOVE':
         await handleRemoveCommand();
+        appState = 'HOME';
         break;
 
-      case 'init':
+      case 'INIT':
         await handleInitCommand([]);
+        appState = 'HOME';
         break;
 
-      case 'help':
+      case 'HELP':
         showInlineHelp();
+        appState = 'HOME';
         break;
 
-      case 'exit':
-        running = false;
+      default:
+        appState = 'HOME';
         break;
     }
   }
 
-  // 4. Encerramento gracioso — só chega aqui se o usuário escolheu "Sair"
+  // Encerramento gracioso — só chega aqui via EXIT explícito
   clack.outro(
     `${theme.muted('👁️  horus encerrado.')} ${theme.muted('Até a próxima!')}`,
   );
 }
 
-// ─── Main ────────────────────────────────────────────────────────────────────
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  const parsed = parseArgv();
-
-  // Tenta executar subcomando direto (hrs add, hrs list, etc.) — one-shot
+  const parsed  = parseArgv();
   const handled = await handleSubcommand(parsed);
-
-  // Se nenhum subcomando foi processado, abre o loop interativo persistente
   if (!handled) {
     await showInteractiveMenu();
   }
 }
-
-// ─── Execução com tratamento de erro global ──────────────────────────────────
 
 main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);

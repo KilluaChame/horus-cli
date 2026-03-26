@@ -1,8 +1,8 @@
 # PROJECT_STATE — Estado Atual do horus CLI
 
-> **Última atualização**: 2026-03-25
+> **Última atualização**: 2026-03-26
 > **Versão**: 0.1.0
-> **Estágio**: Fase 2 concluída → Entrando na Fase 3
+> **Estágio**: Fase 8 concluída → Pronta para Integração de IA (Fase 9)
 
 ---
 
@@ -15,9 +15,11 @@
 | **Fase 3** | Discovery Engine — O Motor de Busca | ✅ **Concluída** | 2026-03-25 |
 | **Fase 4** | Executor Proxy e Tratamento de Processos | ✅ **Concluída** | 2026-03-25 |
 | **Fase 5** | Distribuição e Empacotamento | ✅ **Concluída** | 2026-03-25 |
-| **Fase 6** | UX Contínua e Navegação Infinita | ✅ **Concluída** | 2026-03-26 |
+| **Fase 6** | UX Contínua e Heurísticas  | ✅ **Concluída** | 2026-03-26 |
+| **Fase 8** | Context Dashboard (V2) e Navegação UI | ✅ **Concluída** | 2026-03-26 |
+| **Fase 8.5**| Bug Bash, Navegação Híbrida e Smart Init | ✅ **Concluída** | 2026-03-26 |
 
-> 🎉 **Status Geral: MVP do Horus CLI Concluído e Estável.**
+> 🎉 **Status Geral: Horus CLI estabilizado. Navegação híbrida e resilience a crash garantidos. Pronto para a IA (Fase 9).**
 
 ---
 
@@ -154,9 +156,23 @@ hrs help               # ≡ hrs -h, hrs --help
 - **Lista Viva (`hrs ls`)**: O registry emite agora uma visualização aprofundada das listagens (com `addedAt` em formatação human-readable de tempo, diretório absoluto e soma estática de Task Count da discovery).
 - **`hrs init --ai`**: Esqueleto implementado usando uma heurística real local que mapeia o projeto. Pode detectar stacks (Next, Docker, Prisma, Rust, Go, Python) para injetar labels amigáveis baseados na stack no arquivo `horus.json`. O prompt original LLM já foi injetado como um DocBlock para ser plugado pela Fase 8.
 
-### Fases 7 e 8 (No Radar)
-- Fase 7 focará em um TUI ou customizações extremas se demandadas.
-- Fase 8 incluirá a integração formal do LLM API Endpoint substituindo a heurística de inteligência da Fase 6 pelo LLM Server SDK.
+### Fases 7 e 8 — Context Dashboard V2 ✅
+
+- **Máquina de Estados Absoluta (`src/index.ts`)**: Migrado o loop simplista para a arquitetura com passagem de contexto `AppState` (`HOME`, `RUN`, `LIST`), prevenindo closure nesting e callback hell. Menu operando agora ininterruptamente. `Ctrl+C` em submenus volta à página inicial em vez de fechar.
+- **Status Bar Dinâmico (`renderContextBar`)**: Renderiza o CWD (Ciano), Nome do Projeto Registrado (Verde) e faz parsing síncrono ultra-rápido (com timeout) da `<brand>` de repositórios Git no local.
+- **Acesso Rápido e Metadados (`lastAccessed`)**: O Schema Zod incorporado à `registry.ts` agora lê as interações em cada projeto via a função atômica transparente `.touchProject()`. Retorna atalhos no menu "⭐ Mais Acessados".
+- **Smart Badges (`src/ui/badges.ts`)**: Módulo puro via `fs.existsSync` que injeta Badges inline nos dropdowns interativos do `@clack/prompts` (`📦`, `👁️` ou `⚠️`).
+- **Transição de Execução Interativa**: Após os child-processes em Terminal finalizarem, `waitForKeypress()` captura entrada RAW em `.isTTY` (`"Pressione Enter para voltar ao menu"`) sem matar a UI da CLI.
+
+### Fase 8.5 — Bug Bash & Navegação Híbrida ✅
+
+- **Estabilização do Daemon (Crash Fix)**: Removido o uso de `handleCancel()` (que acionava `process.exit`) nos prompts de registro e seleção. A navegação agora utiliza o _Call Stack_ do próprio `async/await` como Pilha de Navegação (Navigation Stack). Um `isCancel()` resulta em `return`, retrocedendo exatamente um estado de forma segura e mantendo o loop vitalício.
+- **Navegação Híbrida em Projetos (`src/commands/projects.ts`)**: O menu `≡ Projetos` exibe a lista completa instantaneamente, permitindo navegação imediata por setas (↑↓). Adicionada a opção fixa `🔍 Filtrar por nome…` no topo, que aciona o modo de busca textual sob demanda sem bloquear a UX inicial.
+- **Smart Init (Fluxo de Recuperação)**: O Discovery Engine não apenas avisa quando um diretório é virgem de configuração, mas bloqueia o fluxo exibindo um prompt: `"Deseja inicializar o horus.json agora?"`. Se aceito, o CLI efetua um `cd` virtual (Context Switch seguro) e inicia o wizard interativo na raiz do novo projeto, voltando ao menu logo após a conclusão.
+- **Microcopy**: Renomeado "Registrar novo portal" para "Registrar novo projeto" para melhor clareza. Cancelamentos em sub-menus geram feedbacks pacíficos (`Registro cancelado.`, `Voltando...`).
+
+### Fase 9 (No Radar)
+- Fase 9 foca na integração genuína do esqueleto LLM já modelado em `init.ts`, para que gere arquivos `/horus.json` através do SDK de IA substituindo as heurísticas.
 
 ---
 
@@ -196,17 +212,19 @@ m:/Projetos/Horus/
 │   └── horus.ts                  ✅ Fase 1
 ├── src/
 │   ├── core/
-│   │   ├── registry.ts           ✅ Fase 2 — CRUD + Zod + escrita atômica
+│   │   ├── registry.ts           ✅ Fase 2/8 — CRUD + Zod + lastAccessed atômico
 │   │   ├── parser.ts             ✅ Fase 3 — Fallbacks e schemas
 │   │   └── executor.ts           ✅ Fase 4 — Wrapper execa com inherit e sinal
 │   ├── ui/
-│   │   ├── theme.ts              ✅ Fase 1 — paleta + banner + saudação
-│   │   └── prompts.ts            ✅ Fase 1 — abstrações @clack
+│   │   ├── theme.ts              ✅ Fase 8 — Context Bar, waitForKeypress e saudação
+│   │   ├── badges.ts             ✅ Fase 8 — Badges de Saúde lazily read
+│   │   └── prompts.ts            ✅ Fase 8.5 — isCancelled() seguro (sem process.exit)
 │   ├── commands/
-│   │   ├── register.ts           ✅ Fase 6 — Path interativo + ls smart
-│   │   ├── run.ts                ✅ Fase 3/4 — Execução de projeto
+│   │   ├── register.ts           ✅ Fase 8.5 — Tratamento de erros robusto e sem crashes
+│   │   ├── run.ts                ✅ Fase 8.5 — Smart Init + Discovery fallback
+│   │   ├── projects.ts           ✅ Fase 8.5 — Navegação híbrida (Setas + Busca filtrada)
 │   │   └── init.ts               ✅ Fase 6 — Init interativo + --ai heurístico
-│   └── index.ts                  ✅ Fase 6 — Stateful Navigation Loop
+│   └── index.ts                  ✅ Fase 8.5 — Máquina de Estados Absoluta (Call Stack)
 ├── docs/
 │   ├── PRD-Horus.md              ✅ Requisitos do produto
 │   ├── tasks.md                  ✅ Contrato horus.json + fallback
