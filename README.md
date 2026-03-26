@@ -1,6 +1,6 @@
 <div align="center">
 
-```
+```text
     ██╗  ██╗ ██████╗ ██████╗ ██╗   ██╗███████╗
     ██║  ██║██╔═══██╗██╔══██╗██║   ██║██╔════╝
     ███████║██║   ██║██████╔╝██║   ██║███████╗
@@ -11,11 +11,11 @@
 
 **The All-Seeing Gateway**
 
-_Navegação visual, execução delegada._
+*Navegação visual, execução delegada. O horus é o controle remoto, o projeto é a TV.*
 
 [![Node.js](https://img.shields.io/badge/Node.js-v18+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)](https://typescriptlang.org)
-[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+[![License: Dual](https://img.shields.io/badge/License-Dual-yellow)](LICENSE)
 
 </div>
 
@@ -23,134 +23,74 @@ _Navegação visual, execução delegada._
 
 ## 👁️ O Problema
 
-Você troca de repositório e precisa rodar o projeto. Mas qual script era mesmo? `npm run dev`? `docker-compose up`? `make start`? O **Horus** acaba com essa fricção cognitiva no seu terminal: um único comando (`hrs` ou `horus`) descobre e lista o que está disponível no seu projeto — você só precisa apontar e pressionar Enter.
+Você troca de repositório e precisa rodar o projeto. Mas qual script era mesmo? `npm run dev`? `docker-compose up`? `dotnet run`? O **Horus** acaba com essa fricção cognitiva no seu terminal: um único comando (`hrs` ou `horus`) descobre e lista todos os comandos disponíveis no seu projeto — você só precisa apontar e pressionar Enter.
 
-> **Filosofia**: O `horus` é o controle remoto. O projeto é a TV. 
-> Ele não executa, ele apenas delega — com total transparência de logs, suporte a barras de carregamento (spinners) nativos e cores originais.
-
----
-
-## 🚀 Instalação
-
-### Instalação Global (Recomendado)
-
-```bash
-npm install -g horus-cli
-```
-
-Após a instalação, o Horus ficará disponível globalmente sob dois aliases nativos: **`hrs`** e **`horus`**. Você pode usar qualquer um deles indiferentemente.
-
-### Testar sem instalar
-
-Quer apenas testar rapidamente num projeto?
-```bash
-npx horus-cli run
-```
+Não perca mais tempo vasculhando `package.json`, `Makefiles` ou `.sln` apenas para subir um ambiente. Com o Horus, a navegação é visual, interativa e sem esforço.
 
 ---
 
-## 🕹️ Como Usar (Comandos)
+## ✨ Principais Funcionalidades
 
-O Horus possui uma interface de linha de comando baseada em menu interativo e opções diretas.
+### 🔄 Always On Dashboard (Loop de Estado Contínuo)
+Uma verdadeira Máquina de Estados operando diretamente no seu TTY. Liste, filtre (fuzzy search) dezenas de projetos via UI, ou role neles nativamente via Setas. O Horus permite realizar saltos entre repositórios globais registrados na sua máquina instantaneamente, operando em um loop persistente que não te abandona após uma execução.
 
-### 1. Navegação Baseada no Contexto (Dashboard V2)
-Descobre o projeto atual e apresenta um menu listando todas as tarefas disponíveis. O menu é reativo, contínuo e operado puramente via TTY.
+### 🔍 Discovery Engine com Fallback Inteligente
+O motor de descoberta prioriza de forma inteligente:
+1. Contratos explícitos no formato `horus.json`.
+2. Inferência de projetos nativos (ex: Node.js lendo `package.json`).
+3. Detecção poliglota (Docker, Go, Rust, .NET, Executáveis raw).
+Tudo interceptado velozmente para apresentar as "Tasks" formatadas e contextualizadas.
 
-Características Principais:
-- **⭐ Mais Acessados**: Atalhos inteligentes no menu que ordenam projetos com base no heurístico de acesso (`lastAccessed`).
-- **≡ Projetos (Navegação Híbrida)**: Em vez de ficar perdido pelo terminal, liste e filtre (fuzzy search) dezenas de projetos via UI, ou role neles nativamente via Setas. O Horus permite que você faça de forma transparente um **Contextual Switch** (`cd` virtual).
+### 🧠 AI Agent (`hrs init --ai`)
+Não quer escrever seu contrato `horus.json` à mão? Nós também não. O motor de **Smart Init** possui uma heurística multi-provider (Ollama ➔ OpenRouter ➔ Groq ➔ Gemini) que lê seus arquivos, escaneia seu README e utiliza inteligência artificial para inferir, categorizar e gerar um arquivo de tarefas blindado e validado em Zod. Menos digitação, zero fricção.
 
-Você pode inclusive acionar e passar flags em um só passo:
-```bash
-hrs run -- --watch
-```
-
-### 2. Fluxo Smart Init 
-Ao deparar-se com projetos sem utilidades registradas (sem `package.json` limpo nem `horus.json`), o motor exibe um fallback de conversão na hora:
-`⚠ Nenhum parser detectou scripts... Deseja inicializar o horus.json agora?`
-Se sim, o CLI invoca a Engine de Criação que prepara sua base de forma segura.
-
-### 3. Gerenciamento de Projetos Globais (`Registry`)
-
-O Horus pode "lembrar" onde seus projetos estão salvos no seu PC. Você pode executá-los de volta de **qualquer diretório** do seu sistema.
-
-| Comando | Alias | Descrição |
-|---------|-------|-----------|
-| `hrs add [path]` | `hrs register` | Registra um projeto no seu mapa global. Se omitir o `[path]`, ele registra a pasta atual. |
-| `hrs list` | `hrs ls` | Lista todos os projetos registrados na sua base de dados local. |
-| `hrs remove` | `hrs rm` | Abre um menu interativo para você remover projetos que não existem mais. |
-| `hrs init` | — | Inicializa um arquivo `horus.json` interativamente baseado nos scripts npm. |
-| `hrs init --ai` | — | Analisa o seu repositório (Next.js, Python, Rust, Docker...) e gera o `horus.json` automaticamente com hints e grupos. |
-| `hrs help` | `hrs -h` | Exibe a ajuda detalhada do CLI. |
+### ⚡ Performance Extrema & Fidedignidade
+- **Boot < 300ms:** Arquitetura de compilação modular usando *Lazy Loading*. O motor de IA e as bibliotecas pesadas só entram na memória caso sejam estritamente necessárias.
+- **Transparência Executiva:** O Horus usa a engine transacional do Execa associada ao `stdio: 'inherit'`. O output que você vê da execução da task, os warnings em vermelho e a barra de carregamento do compilador original são mantidos intactos, repassados perfeitamente com todas as cores ANSI nativas. O comando executa como se o Horus não estivesse lá.
 
 ---
 
-## ⚙️ A Mágica: Discovery Engine (`horus.json` vs `package.json`)
+## 🕹️ Guia de Comandos
 
-Quando você liga o Horus num projeto, o motor de busca executa um **Fallback Inteligente** em duas etapas:
+O fluxo recomendado é puramente visual (digite apenas `horus` e siga na interface). No entanto, o CLI oferece suporte completo para atalhos diretos:
 
-#### 1. Prioridade: `horus.json`
-O Horus procura primeiro por um arquivo `.json` customizado na base do projeto. Aqui você dita exatamente o que deve aparecer nos menus, podendo agrupar e dar "hints" (dicas) aos seus comandos interativos!
-
-```json
-{
-  "name": "Meu Super Projeto",
-  "description": "App Backend",
-  "tasks": [
-    {
-      "label": "👁️ Watch Mode",
-      "cmd": "npm run dev",
-      "hint": "Levanta o servidor local"
-    },
-    {
-      "label": "🏗️ Build Production",
-      "cmd": "npm run build"
-    }
-  ]
-}
-```
-
-#### 2. Fallback Transparente: `package.json`
-Se não houver um `horus.json` ou se ele estiver malformado, o Horus não entra em pânico. Ele automaticamente desvia para o seu `package.json`, filtra os hooks nativos sujos do npm (como `preinstall` e `postbuild`), e converte tudo interativamente. Você ganha a UI visual instantaneamente, a custo zero de configuração.
+| Comando | Alias | Flag | Descrição |
+| :--- | :---: | :---: | :--- |
+| `horus run` | `hrs` | `--watch` | Inicia o motor interativo no diretório atual (repassa argumentos extras nativamente) |
+| `horus register` | `hrs add` | `[path]` | Registra o projeto atual ou do diretório fornecido no catálogo global de atalhos. |
+| `horus list` | `hrs ls` | | Abre a interface de visualização, filtragem e switch de projetos salvos. |
+| `horus remove` | `hrs rm` | `--purge` | Abre menu para remover projeto do catálogo (ou limpa atalhos com paths inválidos). |
+| `horus init` | `hrs init` | `--ai`, `--prompt` | Cria um template inicial do contrato abstrato de automações local. |
 
 ---
 
-## ⚡ Por Que o Horus? (Sob o Capô)
+## 📝 License (Dual)
 
-Para não atrasar a vida do desenvolvedor, o Horus foi montado com métricas extremas de otimização:
+This project is licensed under a **Dual License**:
 
-- **Boot Super Fino (`< 300ms`)**: Módulos não essenciais (como o próprio `parser` do Discovery Engine e o `execa`) sofrem _Lazy Load_ extremo. Só vão pra memória quando a UI precisa deles, independentemente das heurísticas de UI híbrida listadas acima.
-- **Stateful Loop (Zero-Exit)**: O CLI usa o seu próprio _Call Stack_ assíncrono como motor de _Navigation Stack_. Isso garante estabilidade a todo teste. `Ctrl-C` cancela _aquela_ tela, sem encerramentos abruptos de todo o daemon.
-- **`stdio: 'inherit'` via Execa**: Ferramentas modernas do NPM como Vite, Next e Expo pintam progresso no terminal direto. O Horus usa multiplexação pura que injeta esse TTY pass-through na sua CLI original. Dá até para fechar com o popular `Ctrl+C` perfeitamente!
-- **Zero Crashes**: Processamento de arquivos com a engine do `Zod v4`. Se o formatador pegar erro humano no JSON, ele converte em aviso visual não bloqueante.
+- **Personal Use**: Free of charge.
+- **Commercial Use**: Requires a paid license.
 
----
-
-## 🧑‍💻 Developer Guide — Setup Local
-
-Para quem quer estudar o código ou ajudar a manter, a CLI é construída em TypeScript (Strict Mode) num bundler ESM-only.
-
-```bash
-# 1. Clone o repositório
-git clone https://github.com/KilluaChame/horus-cli.git
-cd horus-cli
-
-# 2. Instalação
-npm install
-
-# 3. Use o linker para simular a instalação global "ao vivo"
-npm run build && npm link
-```
-
-### Scripting Utils
-- **`npm run dev`**: Escuta eventos de salvamento do TS e compila on-the-fly (`tsup --watch`).
-- **`npm run typecheck`**: Escaneia as tipagens restritas do código.
-
-> Após o `npm link`, o comando `hrs` acionará as versões da pasta raiz clonada! Alterações são refletidas instantaneamente.
+For commercial inquiries or to purchase a license, please contact me [@mateus_chame](https://www.instagram.com/mateus_chame/).
 
 ---
 
-## 📝 Licença
+## 👨‍💻 Contribuições
 
-Lançado sob a **MIT License** © horus contributors. 
-_Delegue. Não decore._
+Contribuições são bem-vindas! Sinta-se à vontade para:
+
+- 🐛 Reportar bugs
+- 💡 Sugerir novas funcionalidades
+- 🚀 Enviar pull requests com melhorias arquiteturais e correções
+
+## 📧 Contato
+
+- **Issues:** Abra uma issue no repositório GitHub
+- **Instagram:** [@mateus_chame](https://www.instagram.com/mateus_chame/)
+- **Me contrate:** 💼 [LinkedIn](https://www.linkedin.com/in/mateus-chame)
+
+---
+
+**Feito com ❤️ para os desenvolvedores!** 👨‍💻
+
+**💸 Me pague um café: 🥤 [Ko-fi](https://ko-fi.com/mateuschame)**
