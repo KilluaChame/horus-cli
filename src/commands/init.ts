@@ -189,79 +189,109 @@ async function runInteractiveInit(cwd: string, outPath: string): Promise<void> {
   writeAndReport(config, outPath);
 }
 
-// ─── Modo IA (Esqueleto Fase 8) ──────────────────────────────────────────────
+// ─── Modo IA (Fase 9 — AI Discovery Agent) ──────────────────────────────────
 
 /**
- * Analisa a stack do projeto e planeja o horus.json ideal.
+ * Integração real com o Google Gemini (Fase 9).
  *
- * FASE 8 — Integração com LLM:
- * O prompt abaixo será enviado à API de IA quando integrada.
- * Por ora, o modo --ai executa uma análise heurística local (sem API externa).
- *
- * ─── PROMPT DO SISTEMA (para referência da Fase 8) ───────────────────────────
- *
- * Você é um assistente de configuração de projetos de software.
- * Analisando a estrutura de arquivos e scripts do projeto, gere um horus.json
- * seguindo estas regras:
- *
- *   1. Identifique a stack tecnológica (Node.js, Python, Rust, Go, Docker, etc.)
- *   2. Crie labels descritivos com emojis relevantes à stack:
- *         Node.js/npm  → 📦  Python → 🐍  Docker → 🐳  Git → 🌱  Teste → 🧪
- *   3. Agrupe tarefas por contexto: "Desenvolvimento", "Build", "Testes", "Deploy", "Git"
- *   4. Adicione hints que expliquem o que o comando faz
- *   5. Filtre comandos internos/hooks (preinstall, postbuild, etc.)
- *   6. Retorne SOMENTE o JSON válido, sem comentários ou markdown
- *
- * Input: { scripts: {...}, files: [...], dependencies: {...} }
- * Output: { name, description, tasks: [{label, cmd, hint, group}] }
- *
- * ─── FIM DO PROMPT ───────────────────────────────────────────────────────────
+ * Fluxo:
+ *   1. Escaneia o repositório via ai-agent.ts (lazy import)
+ *   2. Envia contexto ao LLM com system prompt estruturado
+ *   3. Valida o JSON retornado com HorusConfigSchema (Zod)
+ *   4. Aplica filtro de segurança @security-auditor
+ *   5. Exibe preview + prompt de confirmação: Salvar / Editar / Cancelar
+ *   6. Em caso de falha de API → fallback para a heurística local
  */
 async function runAiInit(cwd: string, outPath: string): Promise<void> {
   const s = clack.spinner();
-  s.start(theme.muted('🤖 Analisando estrutura do projeto...'));
+  s.start(theme.muted('🤖 Conectando ao AI Discovery Agent (Gemini)…'));
 
-  // Análise heurística local (substituída pela API de IA na Fase 8)
-  const stackInfo = analyzeProjectStack(cwd);
-  await sleep(800); // Simula latência de análise
+  // Lazy-import: garante que o SDK de IA não infle o bundle de boot (RNF2)
+  const { runAiDiscovery } = await import('../core/ai-agent.js');
+  const outcome = await runAiDiscovery(cwd).catch((err: unknown) => ({
+    ok: false as const,
+    reason: 'unknown' as const,
+    message: err instanceof Error ? err.message : String(err),
+  }));
 
-  s.stop(theme.success(`✓ Stack detectada: ${stackInfo.stackLabel}`));
-
-  // Gera tarefas baseadas na heurística
-  const aiTasks = generateAiTasks(stackInfo);
-
-  clack.log.info(
-    theme.muted(`💡 Geradas ${aiTasks.length} tarefa(s) baseadas na stack detectada.`),
+  s.stop(
+    outcome.ok
+      ? theme.success('✓ horus.json gerado com IA!')
+      : theme.warn(`⚠  Fallback para heurística local — ${outcome.message.split('\n')[0]}`),
   );
 
-  // Mostra preview antes de salvar
-  const preview = aiTasks
-    .slice(0, 4)
-    .map((t) => `  ${theme.accent(t.label)} → ${theme.muted(t.cmd)}`)
+  // ── Fallback para heurística local em caso de erro ──────────────────────────
+  if (!outcome.ok) {
+    if (outcome.reason === 'no-api-key') {
+      clack.note(
+        [
+          `${theme.muted('Para usar o AI Agent, exporte sua chave do Google Gemini:')}`,
+          `  ${theme.accent('$')} ${theme.bold('export GEMINI_API_KEY="sua-chave"')}`,
+          `  ${theme.muted('→ Obtenha sua chave em: https://aistudio.google.com/apikey')}`,
+          '',
+          `${theme.muted('Continuando com a heurística local…')}`,
+        ].join('\n'),
+        theme.warn('🔑 GEMINI_API_KEY não encontrada'),
+      );
+    } else {
+      clack.log.warn(theme.warn(outcome.message));
+    }
+
+    // Ativa fallback heurístico
+    const stackInfo = analyzeProjectStack(cwd);
+    const aiTasks   = generateAiTasks(stackInfo);
+    const config    = buildHorusConfig(
+      stackInfo.projectName,
+      `Gerado pelo horus (heurística local) — stack: ${stackInfo.stackLabel}`,
+      aiTasks,
+    );
+    writeAndReport(config, outPath);
+    return;
+  }
+
+  // ── Exibir alertas de segurança ──────────────────────────────────────────────
+  if (outcome.warnings.length > 0) {
+    clack.log.warn(theme.warn('🛡  Comandos suspeitos foram removidos pelo filtro de segurança:'));
+    for (const w of outcome.warnings) {
+      clack.log.info(theme.muted(`  ${w}`));
+    }
+  }
+
+  // ── Preview do contrato gerado pela IA ─────────────────────────────────────
+  const tasks   = outcome.config.tasks ?? [];
+  const preview = tasks
+    .slice(0, 6)
+    .map((t) => `  ${theme.accent(t.label)}  ${theme.muted('→')}  ${theme.muted(t.cmd)}${t.hint ? `  ${theme.muted('·')} ${theme.muted(t.hint)}` : ''}`)
     .join('\n');
 
   clack.note(
-    preview + (aiTasks.length > 4 ? `\n  ${theme.muted(`... e mais ${aiTasks.length - 4} tarefa(s)`)}` : ''),
-    theme.primary('🔮 Preview do horus.json gerado'),
+    [
+      `${theme.bold('Nome:')}    ${theme.accent(outcome.config.name)}`,
+      outcome.config.description ? `${theme.bold('Desc:')}    ${theme.muted(outcome.config.description)}` : '',
+      `${theme.bold('Tasks:')}   ${theme.accent(String(tasks.length))} tarefa(s)`,
+      '',
+      preview,
+      tasks.length > 6 ? `  ${theme.muted(`… e mais ${tasks.length - 6} tarefa(s)`)}` : '',
+    ].filter(Boolean).join('\n'),
+    theme.primary('🔮 Contrato gerado pela IA'),
   );
 
-  const confirm = await clack.confirm({
-    message: theme.primary('Salvar este horus.json?'),
-    initialValue: true,
+  // ── Confirmação: Salvar / Cancelar ─────────────────────────────────────────
+  const action = await clack.select({
+    message: theme.primary('Este contrato reflete bem o seu projeto?'),
+    options: [
+      { value: 'save',   label: `${theme.success('✓')}  Salvar horus.json` },
+      { value: 'cancel', label: theme.muted('✕  Cancelar') },
+    ],
   });
 
-  if (wasCancelled(confirm) || !confirm) {
+  if (wasCancelled(action) || action === 'cancel') {
     clack.log.info(theme.muted('Init cancelado.'));
     return;
   }
 
-  const config = buildHorusConfig(
-    stackInfo.projectName,
-    `Gerado pelo horus IA Agent — stack: ${stackInfo.stackLabel}`,
-    aiTasks,
-  );
-
-  writeAndReport(config, outPath);
+  // Converte para Record<string, unknown> para writeAndReport
+  writeAndReport(outcome.config as unknown as Record<string, unknown>, outPath);
 }
 
 // ─── Análise de Stack (heurística local) ────────────────────────────────────
