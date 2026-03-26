@@ -1,0 +1,63 @@
+# ==========================================
+# 🌌 .geminiignore PERFEITO - Projeto EventSquad
+# ==========================================
+
+# 1. Dependências e Infraestrutura (Essencial)
+# Esconde milhares de arquivos de bibliotecas e cache de build
+node_modules/
+.expo/
+dist/
+build/
+.turbo/
+.git/
+*.log
+
+# 2. Antigravity Library (O Maior Poupador de Tokens)
+# Evita que a IA tente indexar 
+data/
+apps/web-app/
+tools/
+examples/
+docs/contributors/
+docs/maintainers/
+docs/sources/
+docs_zh-CN/
+Pronpts/
+
+# 3. Assets e Arquivos Binários
+# A IA não consegue ler lógica em imagens ou vídeos; ignore-os para poupar contexto
+assets/
+apps/mobile/assets/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.mp4
+*.pdf
+*.avif
+*.webp
+
+# 4. Metadados e Configurações de Ambiente
+# Esconde arquivos que não contêm lógica de programação relevante para o Agente
+.nvmrc
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.npm/
+.terraform/
+.docker/
+venv/
+notebooklm-send/
+
+# 5. Temporários e Cache de IDE
+.agent/cache/
+.vscode/
+.idea/
+*.tmp
+
+# 6. Agente e Ferramentas (Interno)
+# Evita que a IA leia suas próprias definições de ferramentas
+skills-lock.json
+.antigravity/
+.agent/skills/
