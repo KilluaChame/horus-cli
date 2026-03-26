@@ -23,6 +23,7 @@ import * as clack from '@clack/prompts';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { theme } from '../ui/theme.js';
 import { wasCancelled } from '../ui/prompts.js';
 import { 
@@ -258,8 +259,168 @@ async function validateApiKey(provider: ProviderDef, apiKey: string): Promise<Pr
 
 // ─── Handler Principal ───────────────────────────────────────────────────────
 
+// ─── Editores Externos ───────────────────────────────────────────────────────
+
+async function openEditor(filePath: string): Promise<void> {
+  // Fallback inteligente de editores
+  let editor = process.env['EDITOR'] || process.env['VISUAL'];
+  
+  if (!editor) {
+    if (process.platform === 'win32') {
+      editor = 'code'; // Tenta VSCode primeiro no Windows
+      try {
+        require('node:child_process').execSync('code --version', { stdio: 'ignore' });
+      } catch {
+        editor = 'notepad'; // Fallback absoluto
+      }
+    } else {
+      editor = 'nano'; // Unix-like
+    }
+  }
+
+  clack.log.info(theme.muted(`Abrindo no editor: ${editor}... Se não abrir, configure $EDITOR`));
+  try {
+    spawnSync(editor, [filePath], { stdio: 'inherit', shell: true });
+    clack.log.success(theme.success('Edição finalizada.'));
+  } catch (err) {
+    clack.log.error(theme.error(`Não foi possível abrir o editor: ${editor}.`));
+  }
+}
+
+// ─── Handler Principal (Menu de Configuração) ────────────────────────────────
+
 export async function handleAiConfig(): Promise<void> {
-  // Nota informativa inicial (exibida uma vez)
+  while (true) {
+    const session = await clack.select({
+      message: theme.primary('⚙️  Configuração do horus'),
+      options: [
+        { value: 'providers', label: `${theme.accent('🤖')}  Provedores de IA`, hint: 'Tokens e Modelos (BYOK)' },
+        { value: 'prompts', label: `${theme.white('📝')}  Prompts Gerais`, hint: 'Gerenciar templates Markdown' },
+        { value: 'back', label: `${theme.muted('←')}  Voltar ao Menu Principal` },
+      ]
+    });
+
+    if (wasCancelled(session) || session === 'back') {
+      return;
+    }
+
+    if (session === 'providers') {
+      await manageProviders();
+    } else if (session === 'prompts') {
+      await managePrompts();
+    }
+  }
+}
+
+// ─── Prompts Gerais ──────────────────────────────────────────────────────────
+
+async function managePrompts(): Promise<void> {
+  const promptStorage = await import('../utils/prompt-storage.js');
+  
+  while (true) {
+    const prompts = promptStorage.listPrompts();
+    
+    const options = [
+      { value: '__create__', label: `${theme.success('➕')} Criar Prompt` },
+    ];
+    
+    if (prompts.length > 5) {
+      options.push({ value: '__filter__', label: `${theme.accent('🔍')} Filtrar por nome…` });
+    }
+    
+    for (const p of prompts) {
+      options.push({ value: p.name, label: `📄 ${theme.white(p.name)}` });
+    }
+    
+    options.push({ value: '__back__', label: `${theme.muted('←')} Voltar` });
+
+    const selection = await clack.select({
+      message: theme.primary('📝 Prompts Gerais'),
+      options
+    });
+
+    if (wasCancelled(selection) || selection === '__back__') return;
+
+    if (selection === '__create__') {
+      const nameInput = await clack.text({
+        message: 'Nome do arquivo (ex: MeuTemplate):',
+        validate: (v) => !v.trim() ? 'O nome não pode ser vazio' : undefined
+      });
+      if (wasCancelled(nameInput)) continue;
+      
+      const res = promptStorage.createPrompt(nameInput as string);
+      if (!res.ok) {
+        clack.log.error(theme.error(res.error!));
+      } else {
+        clack.log.success(theme.success(`Arquivo criado em: ${res.path}`));
+        await openEditor(res.path!);
+      }
+      continue;
+    }
+    
+    if (selection === '__filter__') {
+       const filterText = await clack.text({
+          message: 'Digite parte do nome para filtrar:'
+       });
+       if (wasCancelled(filterText)) continue;
+       
+       const filterStr = (filterText as string).toLowerCase();
+       const matches = prompts.filter(p => p.name.toLowerCase().includes(filterStr));
+       
+       if (matches.length === 0) {
+          clack.log.info(theme.muted(`Nenhum prompt encontrado para "${filterStr}".`));
+       } else {
+          const matchSel = await clack.select({
+            message: 'Selecione o prompt:',
+            options: [
+              ...matches.map(p => ({ value: p.name, label: `📄 ${theme.white(p.name)}` })),
+              { value: '__back__', label: `${theme.muted('←')} Cancelar filtro` }
+            ]
+          });
+          if (!wasCancelled(matchSel) && matchSel !== '__back__') {
+             await manageSinglePrompt(matchSel as string, promptStorage);
+          }
+       }
+       continue;
+    }
+    
+    await manageSinglePrompt(selection as string, promptStorage);
+  }
+}
+
+async function manageSinglePrompt(filename: string, promptStorage: any): Promise<void> {
+  while (true) {
+    const action = await clack.select({
+      message: theme.primary(`⚙️  Gerenciar Prompt: ${theme.accent(filename)}`),
+      options: [
+        { value: 'edit', label: `${theme.accent('✏️')}  Editar Prompt` },
+        { value: 'delete', label: `${theme.error('🗑️')}  Deletar Prompt` },
+        { value: 'back', label: `${theme.muted('←')}  Voltar` }
+      ]
+    });
+
+    if (wasCancelled(action) || action === 'back') return;
+
+    if (action === 'edit') {
+      const filePath = path.join(promptStorage.PROMPTS_DIR, filename);
+       await openEditor(filePath);
+    } else if (action === 'delete') {
+      const confirm = await clack.confirm({
+         message: theme.warn(`Tem certeza que deseja deletar ${filename}? Essa ação é irreversível!`),
+         initialValue: false
+      });
+      if (!wasCancelled(confirm) && confirm) {
+         promptStorage.deletePrompt(filename);
+         clack.log.success(theme.success(`Prompt deletado: ${filename}`));
+         return; 
+      }
+    }
+  }
+}
+
+// ─── Provedores de IA ────────────────────────────────────────────────────────
+
+async function manageProviders(): Promise<void> {
   const providerGuide = PROVIDERS
     .map((p) => `  ${theme.accent('●')} ${theme.white(p.label.padEnd(22))} ${theme.muted('→')} ${theme.accent(p.keyUrl)}`)
     .join('\n');
@@ -269,10 +430,9 @@ export async function handleAiConfig(): Promise<void> {
     providerGuide + '\n\n' +
     `${theme.muted('💡 Dica: O Ollama roda 100% local e não precisa de API Key.')}\n` +
     `${theme.muted('🔒 Suas chaves serão salvas em')} ${theme.accent('~/.horus/.env')} ${theme.muted('(fora do Git).')}`,
-    theme.primary('⚙️  Configuração de Provedores de IA')
+    theme.primary('🤖 Provedores de IA')
   );
 
-  // ─── Loop de configuração ─────────────────────────────────────────────
   while (true) {
     if (!fs.existsSync(GLOBAL_ENV_PATH)) {
       clearInternalState();
