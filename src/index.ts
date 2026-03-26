@@ -27,8 +27,15 @@
  *   processo.exit() NUNCA é chamado em handlers — apenas em HOME config EXIT
  */
 
-import * as clack from '@clack/prompts';
 import * as path from 'node:path';
+import * as url from 'node:url';
+import * as dotenv from 'dotenv';
+
+// Carrega .env da raiz do projeto (relativo ao bundle compilado em dist/)
+const __bundleDir = url.fileURLToPath(new URL('.', import.meta.url));
+dotenv.config({ path: path.resolve(__bundleDir, '..', '.env') });
+
+import * as clack from '@clack/prompts';
 import {
   renderBanner,
   renderGreeting,

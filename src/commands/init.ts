@@ -225,13 +225,14 @@ async function runAiInit(cwd: string, outPath: string): Promise<void> {
     if (outcome.reason === 'no-api-key') {
       clack.note(
         [
-          `${theme.muted('Para usar o AI Agent, exporte sua chave do Google Gemini:')}`,
-          `  ${theme.accent('$')} ${theme.bold('export GEMINI_API_KEY="sua-chave"')}`,
-          `  ${theme.muted('→ Obtenha sua chave em: https://aistudio.google.com/apikey')}`,
+          `${theme.muted('Para usar o AI Agent, exporte a chave da Groq (Llama 3) ou Google Gemini:')}`,
+          `  ${theme.accent('$')} ${theme.bold('export GROQ_API_KEY="sua-chave-aqui"')}`,
+          `  ${theme.muted('→ Groq (Grátis & Muito Rápido): https://console.groq.com/')}`,
+          `  ${theme.muted('→ Gemini (Grátis): https://aistudio.google.com/')}`,
           '',
           `${theme.muted('Continuando com a heurística local…')}`,
         ].join('\n'),
-        theme.warn('🔑 GEMINI_API_KEY não encontrada'),
+        theme.warn('🔑 Chave de API de IA não encontrada'),
       );
     } else {
       clack.log.warn(theme.warn(outcome.message));

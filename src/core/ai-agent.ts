@@ -183,22 +183,46 @@ function auditTasks(
 
 // ─── Chamada ao LLM (Lazy-loaded) ────────────────────────────────────────────
 
-async function callGemini(prompt: string): Promise<string> {
-  const apiKey = process.env['HORUS_GEMINI_KEY'] ?? process.env['GEMINI_API_KEY'];
+async function callAiProvider(prompt: string): Promise<string> {
+  const groqKey   = process.env['GROQ_API_KEY'];
+  const geminiKey = process.env['HORUS_GEMINI_KEY'] ?? process.env['GEMINI_API_KEY'];
 
-  if (!apiKey) {
+  if (!groqKey && !geminiKey) {
     throw Object.assign(new Error('Chave de API não encontrada.'), { code: 'no-api-key' });
   }
 
-  // Lazy-load: só importa o SDK se o agente for chamado
-  const { GoogleGenerativeAI } = await import('@google/generative-ai');
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  let text = '';
 
-  const result = await model.generateContent(prompt);
-  const text   = result.response.text();
+  if (groqKey) {
+    // ─── Provedor: Groq (Llama 3) ───────────────────────────────────────────
+    const { Groq } = await import('groq-sdk');
+    const groq = new Groq({ apiKey: groqKey });
+    
+    const completion = await groq.chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      model: 'llama3-8b-8192',
+      response_format: { type: 'json_object' },
+      temperature: 0,
+    });
+    
+    text = completion.choices[0]?.message?.content ?? '{}';
+  } else {
+    // ─── Provedor: Google Gemini ────────────────────────────────────────────
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const genAI = new GoogleGenerativeAI(geminiKey!);
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      generationConfig: {
+        responseMimeType: 'application/json',
+        temperature: 0,
+      },
+    });
 
-  // Remove possível wrapper de markdown que o LLM insira mesmo sendo instruído a não
+    const result = await model.generateContent(prompt);
+    text = result.response.text();
+  }
+
+  // Remove possível wrapper de markdown inserido pelo LLM (em ambos provedores)
   return text
     .replace(/^```(?:json)?\s*/m, '')
     .replace(/\s*```\s*$/m, '')
@@ -217,7 +241,7 @@ export async function runAiDiscovery(cwd: string): Promise<AiAgentOutcome> {
   // 2. Chamar o LLM
   let rawJson: string;
   try {
-    rawJson = await callGemini(prompt);
+    rawJson = await callAiProvider(prompt);
   } catch (err) {
     const code = (err as { code?: string }).code;
     if (code === 'no-api-key') {
@@ -225,8 +249,8 @@ export async function runAiDiscovery(cwd: string): Promise<AiAgentOutcome> {
         ok: false,
         reason: 'no-api-key',
         message:
-          'Variável de ambiente GEMINI_API_KEY não encontrada.\n' +
-          'Exporte com: export GEMINI_API_KEY="sua-chave"',
+          'Variáveis de ambiente GROQ_API_KEY ou GEMINI_API_KEY não encontradas.\n' +
+          'Exporte com: export GROQ_API_KEY="sua-chave"',
       };
     }
     return {

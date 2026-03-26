@@ -1,23 +1,35 @@
 {
-  "name": "Horus CLI",
-  "description": "The All-Seeing Gateway — Dev workflow",
+  "name": "Horus",
+  "description": "Gerado pelo horus (heurística local) — stack: Node.js",
   "tasks": [
     {
       "label": "👁️  Watch Mode",
       "cmd": "npm run dev",
-      "hint": "Rebuild automático ao salvar arquivos",
+      "hint": "tsup --watch",
       "group": "Desenvolvimento"
     },
     {
       "label": "🏗️  Build",
       "cmd": "npm run build",
-      "hint": "Bundle minificado em dist/",
-      "group": "Desenvolvimento"
+      "hint": "tsup",
+      "group": "Build"
     },
     {
       "label": "🔍 Typecheck",
       "cmd": "npm run typecheck",
-      "hint": "Verifica tipos sem compilar",
+      "hint": "tsc --noEmit",
+      "group": "Qualidade"
+    },
+    {
+      "label": "🚀 Iniciar",
+      "cmd": "npm run start",
+      "hint": "node dist/bin/horus.js",
+      "group": "Desenvolvimento"
+    },
+    {
+      "label": "🔍 Lint",
+      "cmd": "npm run lint",
+      "hint": "tsc --noEmit",
       "group": "Qualidade"
     },
     {
@@ -26,16 +38,16 @@
       "group": "Git"
     },
     {
-      "label": "🚀 Git: Commit e Push",
-      "cmd": "git add . && git commit -m \"chore: update\" && git push",
-      "hint": "Atenção: commita tudo!",
+      "label": "🌱 Git: Pull",
+      "cmd": "git pull",
+      "hint": "Atualiza o repositório",
       "group": "Git"
     },
     {
-      "label": "🔬 Ver Logs do Bundle",
-      "cmd": "node dist/bin/horus.js help | head -20",
-      "hint": "Verifica saída do binário compilado",
-      "group": "Debug"
+      "label": "🌱 Git: Log",
+      "cmd": "git log --oneline -10",
+      "hint": "Últimos 10 commits",
+      "group": "Git"
     }
   ]
 }
