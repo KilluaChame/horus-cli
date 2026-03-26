@@ -32,66 +32,84 @@ const HORUS_HOME = path.join(os.homedir(), '.horus');
 /** Caminho do .env global (nunca salvo em repo local) */
 const GLOBAL_ENV_PATH = path.join(HORUS_HOME, '.env');
 
-/** Provedores suportados com metadados de orientação */
+/** Provedores suportados com catálogo de modelos e documentação */
 const PROVIDERS = [
   {
     value: 'gemini',
     label: 'Google Gemini',
     envKey: 'GEMINI_API_KEY',
+    modelEnvKey: 'GEMINI_MODEL',
     defaultModel: 'gemini-2.5-flash',
-    url: 'https://aistudio.google.com/apikey',
+    keyUrl: 'https://aistudio.google.com/apikey',
+    modelsUrl: 'https://ai.google.dev/gemini-api/docs/models',
     hint: 'Gratuito até 2M tokens/min',
+    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro'],
   },
   {
     value: 'openrouter',
     label: 'OpenRouter',
     envKey: 'OPENROUTER_API_KEY',
+    modelEnvKey: 'OPENROUTER_MODEL',
     defaultModel: 'google/gemini-2.5-flash',
-    url: 'https://openrouter.ai/keys',
+    keyUrl: 'https://openrouter.ai/keys',
+    modelsUrl: 'https://openrouter.ai/models',
     hint: 'Acesso a 200+ modelos, pague por uso',
+    models: ['google/gemini-2.5-flash', 'anthropic/claude-sonnet-4', 'openai/gpt-4o', 'meta-llama/llama-3.3-70b'],
   },
   {
     value: 'groq',
     label: 'Groq',
     envKey: 'GROQ_API_KEY',
+    modelEnvKey: 'GROQ_MODEL',
     defaultModel: 'llama-3.3-70b-versatile',
-    url: 'https://console.groq.com/keys',
+    keyUrl: 'https://console.groq.com/keys',
+    modelsUrl: 'https://console.groq.com/docs/models',
     hint: 'Inferência ultra-rápida, free tier generoso',
+    models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it', 'mixtral-8x7b-32768'],
   },
   {
     value: 'openai',
     label: 'OpenAI',
     envKey: 'OPENAI_API_KEY',
+    modelEnvKey: 'OPENAI_MODEL',
     defaultModel: 'gpt-4o-mini',
-    url: 'https://platform.openai.com/api-keys',
+    keyUrl: 'https://platform.openai.com/api-keys',
+    modelsUrl: 'https://platform.openai.com/docs/models',
     hint: 'GPT-4o, o1, etc.',
+    models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1', 'o4-mini'],
   },
   {
     value: 'anthropic',
     label: 'Anthropic (Claude)',
     envKey: 'ANTHROPIC_API_KEY',
+    modelEnvKey: 'ANTHROPIC_MODEL',
     defaultModel: 'claude-sonnet-4-20250514',
-    url: 'https://console.anthropic.com/settings/keys',
-    hint: 'Claude 3.5 Sonnet, Opus, etc.',
+    keyUrl: 'https://console.anthropic.com/settings/keys',
+    modelsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models',
+    hint: 'Claude Sonnet, Opus, Haiku',
+    models: ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229'],
   },
   {
     value: 'ollama',
     label: 'Ollama (Local)',
     envKey: 'OLLAMA_MODEL',
+    modelEnvKey: 'OLLAMA_MODEL',
     defaultModel: 'llama3',
-    url: 'https://ollama.com/library',
+    keyUrl: 'https://ollama.com/download',
+    modelsUrl: 'https://ollama.com/library',
     hint: '100% offline, sem API Key',
+    models: ['llama3', 'llama3.1', 'codellama', 'mistral', 'gemma2', 'phi3'],
   },
 ] as const;
 
 type ProviderValue = typeof PROVIDERS[number]['value'];
 
-// ─── Handler Principal (Loop Visual com Status) ──────────────────────────────
+// ─── Handler Principal (Loop Visual com Status + Catálogo de Modelos) ─────────
 
 export async function handleAiConfig(): Promise<void> {
   // Nota informativa inicial (exibida uma vez)
   const providerGuide = PROVIDERS
-    .map((p) => `  ${theme.accent('●')} ${theme.white(p.label.padEnd(22))} ${theme.muted('→')} ${theme.accent(p.url)}`)
+    .map((p) => `  ${theme.accent('●')} ${theme.white(p.label.padEnd(22))} ${theme.muted('→')} ${theme.accent(p.keyUrl)}`)
     .join('\n');
 
   clack.note(
@@ -114,8 +132,13 @@ export async function handleAiConfig(): Promise<void> {
     const providerOptions = PROVIDERS.map((p) => {
       const hasKey = isProviderConfigured(p, existingEnv);
       const statusIcon = hasKey ? theme.success('✔') : theme.error('✗');
+
+      // Mostra modelo ativo se configurado
+      const activeModel = existingEnv.get(p.modelEnvKey) || '';
+      const modelBadge = hasKey && activeModel ? theme.muted(` [${activeModel}]`) : '';
+
       const statusHint = hasKey
-        ? theme.success('Configurado') + (configuredThisSession.has(p.value) ? theme.muted(' (agora)') : '')
+        ? theme.success('Configurado') + modelBadge + (configuredThisSession.has(p.value) ? theme.muted(' (agora)') : '')
         : theme.error('Pendente') + theme.muted(` — ${p.hint}`);
 
       return {
@@ -142,7 +165,8 @@ export async function handleAiConfig(): Promise<void> {
 
     if (wasCancelled(selectedProvider) || selectedProvider === '__back__') {
       // Resumo final antes de sair
-      const totalConfigured = PROVIDERS.filter((p) => isProviderConfigured(p, readGlobalEnvMap())).length;
+      const finalEnv = readGlobalEnvMap();
+      const totalConfigured = PROVIDERS.filter((p) => isProviderConfigured(p, finalEnv)).length;
       if (totalConfigured > 0) {
         clack.log.success(
           theme.success(`${totalConfigured}/${PROVIDERS.length}`) +
@@ -159,46 +183,71 @@ export async function handleAiConfig(): Promise<void> {
     const provider = PROVIDERS.find((p) => p.value === selectedProvider)!;
     const isOllama = provider.value === 'ollama';
 
-    const config = await clack.group(
+    // 1. Sub-menu de seleção de modelo
+    const modelOptions = [
+      ...provider.models.map((m) => ({
+        value: m as string,
+        label: m === provider.defaultModel ? `${theme.success(m)}` : `${m}`,
+        hint: m === provider.defaultModel ? theme.muted('(recomendado)') : '',
+      })),
       {
-        modelName: () =>
-          clack.text({
-            message: theme.white(`Nome do modelo para ${provider.label}:`),
-            placeholder: provider.defaultModel,
-            defaultValue: provider.defaultModel,
-            validate: (v) => {
-              if (!v.trim()) return 'O nome do modelo não pode ser vazio.';
-            },
-          }),
-
-        apiKey: () => {
-          if (isOllama) {
-            return Promise.resolve('__ollama_local__');
-          }
-          return clack.password({
-            message: theme.white(`API Key para ${provider.label}:`),
-            validate: (v) => {
-              if (!v || v.trim().length < 8) return 'A chave deve ter no mínimo 8 caracteres.';
-            },
-          });
-        },
+        value: '__custom__',
+        label: `${theme.accent('✎')}  Digitar manualmente`,
+        hint: theme.muted('Usar um modelo não listado'),
       },
-      {
-        onCancel: () => {
-          clack.log.info(theme.muted('Configuração deste provedor cancelada.'));
-        },
-      },
-    );
+    ];
 
-    // Se cancelou o group, volta ao loop (não sai do wizard)
-    if (!config || wasCancelled(config.modelName) || wasCancelled(config.apiKey)) {
-      continue;
+    const modelChoice = await clack.select({
+      message: theme.white(`Modelo para ${provider.label}:`),
+      options: modelOptions,
+    });
+
+    if (wasCancelled(modelChoice)) continue;
+
+    let modelName: string;
+
+    if (modelChoice === '__custom__') {
+      // Nota com link de documentação para ajudar o dev a encontrar o nome certo
+      clack.log.info(
+        theme.muted('📚 Consulte os modelos disponíveis em: ') +
+        theme.accent(provider.modelsUrl)
+      );
+
+      const customModel = await clack.text({
+        message: theme.white(`Nome do modelo (${provider.label}):`),
+        placeholder: provider.defaultModel,
+        validate: (v) => {
+          if (!v.trim()) return 'O nome do modelo não pode ser vazio.';
+        },
+      });
+
+      if (wasCancelled(customModel)) continue;
+      modelName = (customModel as string).trim();
+    } else {
+      modelName = modelChoice as string;
     }
 
-    const modelName = (config.modelName as string).trim();
-    const apiKey = (config.apiKey as string).trim();
+    // 2. API Key (skip para Ollama)
+    let apiKey = '';
 
-    // ── Persistir no ~/.horus/.env ──────────────────────────────────────
+    if (!isOllama) {
+      clack.log.info(
+        theme.muted('🔑 Obtenha sua chave em: ') +
+        theme.accent(provider.keyUrl)
+      );
+
+      const keyInput = await clack.password({
+        message: theme.white(`API Key para ${provider.label}:`),
+        validate: (v) => {
+          if (!v || v.trim().length < 8) return 'A chave deve ter no mínimo 8 caracteres.';
+        },
+      });
+
+      if (wasCancelled(keyInput)) continue;
+      apiKey = (keyInput as string).trim();
+    }
+
+    // 3. Persistir no ~/.horus/.env
     const s = clack.spinner();
     s.start(theme.muted(`Salvando ${provider.label}...`));
 
@@ -212,10 +261,12 @@ export async function handleAiConfig(): Promise<void> {
         envContent = fs.readFileSync(GLOBAL_ENV_PATH, 'utf-8');
       }
 
+      // Salva modelo
+      envContent = upsertEnvVar(envContent, provider.modelEnvKey, modelName);
+
+      // Salva chave (exceto Ollama)
       if (!isOllama) {
         envContent = upsertEnvVar(envContent, provider.envKey, apiKey);
-      } else {
-        envContent = upsertEnvVar(envContent, 'OLLAMA_MODEL', modelName);
       }
 
       // Escrita atômica
@@ -223,11 +274,10 @@ export async function handleAiConfig(): Promise<void> {
       fs.writeFileSync(tmpPath, envContent, 'utf-8');
       fs.renameSync(tmpPath, GLOBAL_ENV_PATH);
 
-      // Atualiza process.env para que o motor de IA já enxergue a chave
+      // Atualiza process.env em tempo real
+      process.env[provider.modelEnvKey] = modelName;
       if (!isOllama) {
         process.env[provider.envKey] = apiKey;
-      } else {
-        process.env['OLLAMA_MODEL'] = modelName;
       }
 
       configuredThisSession.add(provider.value);

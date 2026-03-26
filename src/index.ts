@@ -70,6 +70,7 @@ type AppState =
   | 'REMOVE'
   | 'INIT'
   | 'README'
+  | 'CONFIG'
   | 'HELP'
   | 'EXIT';
 
@@ -237,7 +238,7 @@ async function showInteractiveMenu(): Promise<void> {
 
       // ── Opções do menu — spec exata do PRD ──────────────────────────────
       type MenuValue =
-        | 'recent' | 'projects' | 'run' | 'add' | 'list' | 'remove' | 'init' | 'readme' | 'help' | 'exit';
+        | 'recent' | 'projects' | 'run' | 'add' | 'list' | 'remove' | 'init' | 'readme' | 'config' | 'help' | 'exit';
 
       const menuOptions: Array<{ value: MenuValue; label: string; hint?: string }> = [
         {
@@ -274,6 +275,11 @@ async function showInteractiveMenu(): Promise<void> {
           value: 'readme',
           label: `${theme.white('📖')}  Ler README do Projeto`,
           hint: 'Visualiza o README.md local',
+        },
+        {
+          value: 'config',
+          label: `${theme.primary('⚙️')}  Configuração do horus`,
+          hint: 'Provedores de IA e chaves API',
         },
         {
           value: 'help',
@@ -313,6 +319,7 @@ async function showInteractiveMenu(): Promise<void> {
         remove:  'REMOVE',
         init:    'INIT',
         readme:  'README',
+        config:  'CONFIG',
         help:    'HELP',
         exit:    'EXIT',
       };
@@ -362,6 +369,13 @@ async function showInteractiveMenu(): Promise<void> {
         await lazyHandleReadmeCommand();
         appState = 'HOME';
         break;
+
+      case 'CONFIG': {
+        const { handleAiConfig } = await import('./commands/ai-config.js');
+        await handleAiConfig();
+        appState = 'HOME';
+        break;
+      }
 
       case 'HELP':
         showInlineHelp();
