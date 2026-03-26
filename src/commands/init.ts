@@ -227,8 +227,9 @@ async function runAiInit(cwd: string, outPath: string): Promise<void> {
         [
           `${theme.muted('Para usar o AI Agent, configure um dos provedores no seu .env:')}`,
           `  ${theme.accent('1.')} ${theme.bold('Ollama (Local/Offline):')} defina OLLAMA_MODEL="llama3"`,
-          `  ${theme.accent('2.')} ${theme.bold('Groq (Grátis):')} defina GROQ_API_KEY`,
-          `  ${theme.accent('3.')} ${theme.bold('Gemini (Grátis):')} defina GEMINI_API_KEY`,
+          `  ${theme.accent('2.')} ${theme.bold('OpenRouter (Grátis):')} defina OPENROUTER_API_KEY`,
+          `  ${theme.accent('3.')} ${theme.bold('Groq (Grátis):')} defina GROQ_API_KEY`,
+          `  ${theme.accent('4.')} ${theme.bold('Gemini (Grátis):')} defina GEMINI_API_KEY`,
           '',
           `${theme.muted('Continuando com a heurística local…')}`,
         ].join('\n'),

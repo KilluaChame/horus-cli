@@ -211,11 +211,12 @@ function auditTasks(
 // ─── Chamada ao LLM (Lazy-loaded) ────────────────────────────────────────────
 
 async function callAiProvider(prompt: string): Promise<string> {
-  const ollamaModel = process.env['OLLAMA_MODEL'];
-  const groqKey     = process.env['GROQ_API_KEY'];
-  const geminiKey   = process.env['HORUS_GEMINI_KEY'] ?? process.env['GEMINI_API_KEY'];
+  const ollamaModel   = process.env['OLLAMA_MODEL'];
+  const openRouterKey = process.env['OPENROUTER_API_KEY'];
+  const groqKey       = process.env['GROQ_API_KEY'];
+  const geminiKey     = process.env['HORUS_GEMINI_KEY'] ?? process.env['GEMINI_API_KEY'];
 
-  if (!ollamaModel && !groqKey && !geminiKey) {
+  if (!ollamaModel && !openRouterKey && !groqKey && !geminiKey) {
     throw Object.assign(new Error('Nenhum provedor de IA encontrado.'), { code: 'no-api-key' });
   }
 
@@ -249,6 +250,32 @@ async function callAiProvider(prompt: string): Promise<string> {
       throw new Error(`Erro ao conectar com Ollama no localhost: ${msg}`);
     }
     
+  } else if (openRouterKey) {
+    // ─── Provedor: OpenRouter (Diversos Modelos Gratuitos e Pagos) ──────────
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openRouterKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://github.com/KilluaChame/horus-cli',
+        'X-Title': 'Horus CLI',
+      },
+      body: JSON.stringify({
+        // Utilizando um dos modelos gratuitos mais rápidos da OpenRouter para desenvolvimento
+        model: 'google/gemini-2.0-flash-lite-preview-02-05:free',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0,
+        response_format: { type: 'json_object' }
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Falha HTTP OpenRouter: ${response.status} - ${await response.text()}`);
+    }
+
+    const data = await response.json() as { choices: Array<{ message: { content: string } }> };
+    text = data.choices?.[0]?.message?.content ?? '{}';
+
   } else if (groqKey) {
     // ─── Provedor: Groq (Llama 3 Rápido) ────────────────────────────────────
     const { Groq } = await import('groq-sdk');
@@ -306,7 +333,7 @@ export async function runAiDiscovery(cwd: string): Promise<AiAgentOutcome> {
         reason: 'no-api-key',
         message:
           'Nenhum provedor de IA configurado.\n' +
-          'No seu .env, defina OLLAMA_MODEL, GROQ_API_KEY ou GEMINI_API_KEY.',
+          'No seu .env, defina OLLAMA_MODEL, OPENROUTER_API_KEY, GROQ_API_KEY ou GEMINI_API_KEY.',
       };
     }
     return {
