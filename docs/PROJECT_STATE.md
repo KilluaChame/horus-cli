@@ -15,6 +15,7 @@
 | **Fase 3** | Discovery Engine — O Motor de Busca | ✅ **Concluída** | 2026-03-25 |
 | **Fase 4** | Executor Proxy e Tratamento de Processos | ✅ **Concluída** | 2026-03-25 |
 | **Fase 5** | Distribuição e Empacotamento | ✅ **Concluída** | 2026-03-25 |
+| **Fase 6** | UX Contínua e Navegação Infinita | ✅ **Concluída** | 2026-03-26 |
 
 > 🎉 **Status Geral: MVP do Horus CLI Concluído e Estável.**
 
@@ -146,12 +147,16 @@ hrs help               # ≡ hrs -h, hrs --help
 
 ## Fases Futuras
 
-### Fase 5 — Distribuição ✅
+### Fase 6 — UX Contínua e Navegação Infinita ✅
 
-- Publicação documentada no README.
-- Suporte duplo ao CLI com os apelidos oficiais (`hrs` e `horus`).
-- Estrutura otimizada para npm global.
-- Documentação "O Problema", Instalação, Guias e Fallback (`horus.json`) consolidada para leitura de programadores finais.
+- **Stateful Navigation Loop**: Implementado na `src/index.ts`. O loop interativo principal mantém a sessão até que se selecione `Sair`.
+- **Registro Interativo Aprimorado**: `hrs add` suporta submeter caminho atual de forma automática ou submeter um caminho via input manual, validado via `fs.existsSync`.
+- **Lista Viva (`hrs ls`)**: O registry emite agora uma visualização aprofundada das listagens (com `addedAt` em formatação human-readable de tempo, diretório absoluto e soma estática de Task Count da discovery).
+- **`hrs init --ai`**: Esqueleto implementado usando uma heurística real local que mapeia o projeto. Pode detectar stacks (Next, Docker, Prisma, Rust, Go, Python) para injetar labels amigáveis baseados na stack no arquivo `horus.json`. O prompt original LLM já foi injetado como um DocBlock para ser plugado pela Fase 8.
+
+### Fases 7 e 8 (No Radar)
+- Fase 7 focará em um TUI ou customizações extremas se demandadas.
+- Fase 8 incluirá a integração formal do LLM API Endpoint substituindo a heurística de inteligência da Fase 6 pelo LLM Server SDK.
 
 ---
 
@@ -198,9 +203,10 @@ m:/Projetos/Horus/
 │   │   ├── theme.ts              ✅ Fase 1 — paleta + banner + saudação
 │   │   └── prompts.ts            ✅ Fase 1 — abstrações @clack
 │   ├── commands/
-│   │   ├── register.ts           ✅ Fase 2 — add + list + remove
-│   │   └── run.ts                ✅ Fase 3/4 — Loop de sessão, discovery + executor
-│   └── index.ts                  ✅ Fase 4 — Parser e extraArgs repassados
+│   │   ├── register.ts           ✅ Fase 6 — Path interativo + ls smart
+│   │   ├── run.ts                ✅ Fase 3/4 — Execução de projeto
+│   │   └── init.ts               ✅ Fase 6 — Init interativo + --ai heurístico
+│   └── index.ts                  ✅ Fase 6 — Stateful Navigation Loop
 ├── docs/
 │   ├── PRD-Horus.md              ✅ Requisitos do produto
 │   ├── tasks.md                  ✅ Contrato horus.json + fallback

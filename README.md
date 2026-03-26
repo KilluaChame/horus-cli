@@ -70,6 +70,8 @@ O Horus pode "lembrar" onde seus projetos estão salvos no seu PC. Você pode ex
 | `hrs add [path]` | `hrs register` | Registra um projeto no seu mapa global. Se omitir o `[path]`, ele registra a pasta atual. |
 | `hrs list` | `hrs ls` | Lista todos os projetos registrados na sua base de dados local. |
 | `hrs remove` | `hrs rm` | Abre um menu interativo para você remover projetos que não existem mais. |
+| `hrs init` | — | Inicializa um arquivo `horus.json` interativamente baseado nos scripts npm. |
+| `hrs init --ai` | — | Analisa o seu repositório (Next.js, Python, Rust, Docker...) e gera o `horus.json` automaticamente com hints e grupos. |
 | `hrs help` | `hrs -h` | Exibe a ajuda detalhada do CLI. |
 
 ---
