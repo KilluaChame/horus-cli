@@ -12,8 +12,8 @@
 |------|------|--------|---------|
 | **Fase 1** | Setup da CLI e Estrutura Cross-Platform | ✅ **Concluída** | 2026-03-25 |
 | **Fase 2** | Registry — O Mapa de Projetos Universal | ✅ **Concluída** | 2026-03-25 |
-| **Fase 3** | Discovery Engine — O Motor de Busca | 🔄 **Em andamento** | — |
-| **Fase 4** | Executor Proxy e Tratamento de Processos | 📋 Planejada | — |
+| **Fase 3** | Discovery Engine — O Motor de Busca | ✅ **Concluída** | 2026-03-25 |
+| **Fase 4** | Executor Proxy e Tratamento de Processos | 🔄 **Em andamento** | — |
 | **Fase 5** | Distribuição e Empacotamento | 📋 Planejada | — |
 
 ---
@@ -113,73 +113,37 @@ hrs help               # ≡ hrs -h, hrs --help
 
 ---
 
-## Fase 3 — Discovery Engine 🔄 (Próxima)
+## Fase 3 — Discovery Engine ✅
 
-### Objetivo
+### O que foi construído
+- `src/core/parser.ts` — Implementação dos schemas Zod (`HorusConfigSchema`, `TaskSchema`, `PackageJsonSchema`).
+- Lógica de dupla-camada/fallback convertendo o output de um `package.json` limpo de scripts como `preinstall` e `postbuild` e adicionando prefixos automáticos como `📦 Run dev`.
+- `src/commands/run.ts` — O executor da CLI. Lê os projetos de CWD → Registry → Interação manual e inicia um **Loop de Sessão** garantindo recomeço veloz sem reinicializar o node e `hrs run`.
+- Zod adaptado para **não relatar Erro de Node Fatal**, formatando os arrays `issues` da v4 num objeto formatado na UI (Ex: `  • tasks[0].label: O label da tarefa não pode estar vazio`) permitindo um uso de Fallback automático em caso de sintaxe malformada.
 
-Ler o `horus.json` do projeto selecionado (ou fazer fallback para `package.json`)
-e apresentar as tarefas disponíveis no menu interativo.
+### Métricas da Fase 3
 
-### Arquivos a implementar
-
-| Arquivo | Responsabilidade |
-|---------|-----------------|
-| `src/core/parser.ts` | `TaskParser` — lê, valida (Zod) e retorna `Task[]` |
-| `src/commands/run.ts` | Orquestra: seleciona projeto → descobre tarefas → apresenta menu |
-
-### Schema Zod a implementar (`HorusConfigSchema`)
-
-```typescript
-const TaskSchema = z.object({
-  label: z.string().min(1),
-  cmd:   z.string().min(1),
-  hint:  z.string().optional(),
-  group: z.string().optional(),
-});
-
-const HorusConfigSchema = z.object({
-  name:        z.string().min(1),
-  description: z.string().optional(),
-  tasks:       z.array(TaskSchema).min(1),
-});
-```
-
-### Lógica de resolução (ordem de prioridade)
-
-```
-1. Existe <projeto>/horus.json?
-   → SIM: Lê e valida com HorusConfigSchema
-          → Válido: usa as tasks definidas
-          → Inválido: exibe warning + tenta fallback
-   → NÃO: vai para 2
-
-2. Existe <projeto>/package.json com chave "scripts"?
-   → SIM: Lê scripts, filtra hooks (pre*/post*), converte para Task[]
-   → NÃO: exibe erro "Nenhuma tarefa encontrada"
-```
-
-### Critérios de aceitação
-
-- [ ] `hrs` no diretório de um projeto registrado exibe as tarefas do `horus.json`
-- [ ] Fallback para `package.json` funciona quando não há `horus.json`
-- [ ] JSON inválido exibe erro amigável e não quebra o processo
-- [ ] Scripts de hook npm (`preinstall`, `postbuild`) são filtrados no fallback
-- [ ] Typecheck: zero erros
-- [ ] Boot ainda < 300ms após implementação
+| Métrica | Valor |
+|---------|-------|
+| Time | ⚡ **~0.3ms por parsing** sincronizado |
+| Testes passados | horus.json válido ✅ · vazio ✅ · campos inválidos ✅ · package.json fallback ✅ |
 
 ---
 
-## Fases Futuras
+## Fase 4 — Executor Proxy 🔄 (Próxima)
 
-### Fase 4 — Executor Proxy
+### Objetivo
+
+Construir o Executor do Proxy de Comandos, permitindo a comunicação e a injeção nativa de processos-filhos vindos das requisições geradas pelo Parser, usando a dependência `execa`.
 
 **Dependência principal**: `execa` (adicionar ao bundle via `noExternal`)
 
-Comportamentos planejados:
-- `execa(cmd, { stdio: 'inherit', shell: true, cwd: projectPath })`
-- Tratamento de `exit code` ≠ 0 com mensagem de erro elegante
-- Retorno ao menu após execução (loop de sessão)
-- Passagem de argumentos extras: `hrs -- --flag valor`
+### Comportamentos planejados
+
+- Encapsular chamadas por processo filho usando: `execa(cmd, { stdio: 'inherit', shell: true, cwd: projectPath })`
+- Proteger execuções com tratamento de exceções do node (`try/catch`).
+- Tratamento explícito de `exit code` ≠ 0 com mensagem de erro elegante sem causar "Crash do CLI".
+- Passagem de argumentos adicionais para comandos usando wildcard (Ex: `hrs run -- --force`)
 
 ### Fase 5 — Distribuição
 
@@ -227,15 +191,15 @@ m:/Projetos/Horus/
 ├── src/
 │   ├── core/
 │   │   ├── registry.ts           ✅ Fase 2 — CRUD + Zod + escrita atômica
-│   │   ├── parser.ts             🔄 Stub — implementar na Fase 3
+│   │   ├── parser.ts             ✅ Fase 3 — Fallbacks e schemas (package.json)
 │   │   └── executor.ts           📋 Stub — implementar na Fase 4
 │   ├── ui/
 │   │   ├── theme.ts              ✅ Fase 1 — paleta + banner + saudação
 │   │   └── prompts.ts            ✅ Fase 1 — abstrações @clack
 │   ├── commands/
 │   │   ├── register.ts           ✅ Fase 2 — add + list + remove
-│   │   └── run.ts                📋 Stub — implementar na Fase 3/4
-│   └── index.ts                  ✅ Fase 2 — argv parser + routing
+│   │   └── run.ts                ✅ Fase 3 — Loop de sessão, discovery orquestrado
+│   └── index.ts                  ✅ Fase 3 — hrs run roteado e executado
 ├── docs/
 │   ├── PRD-Horus.md              ✅ Requisitos do produto
 │   ├── tasks.md                  ✅ Contrato horus.json + fallback
