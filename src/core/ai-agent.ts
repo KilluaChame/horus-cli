@@ -261,8 +261,8 @@ async function callAiProvider(prompt: string): Promise<string> {
         'X-Title': 'Horus CLI',
       },
       body: JSON.stringify({
-        // Utilizando um dos modelos gratuitos mais rápidos da OpenRouter para desenvolvimento
-        model: 'google/gemini-2.0-flash-lite-preview-02-05:free',
+        // Utilizando Llama 3.3 70B (estável e 100% gratuito na OpenRouter)
+        model: 'meta-llama/llama-3.3-70b-instruct:free',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0,
         response_format: { type: 'json_object' }
