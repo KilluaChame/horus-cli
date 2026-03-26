@@ -233,53 +233,114 @@ export async function handleListCommand(): Promise<void> {
 
 /**
  * Remove um projeto do registry.
- * Apresenta um select interativo para o usuário escolher qual remover.
+ * Utiliza o modelo de Navegação Híbrida (Search-First).
  */
 export async function handleRemoveCommand(): Promise<void> {
-  const projects = listProjects();
+  type NavMode = 'browse' | 'search';
+  let mode: NavMode = 'browse';
+  let searchQuery = '';
 
-  if (projects.length === 0) {
-    clack.log.warn(theme.warn('Nenhum projeto para remover. O registry está vazio.'));
-    return;
+  while (true) {
+    const projects = listProjects();
+
+    if (projects.length === 0) {
+      clack.log.warn(theme.warn('Nenhum projeto para remover. O registry está vazio.'));
+      return;
+    }
+
+    // ── Modo Busca ─────────────────────────────────────────────────────────
+    if (mode === 'search') {
+      const searchInput = await clack.text({
+        message: theme.primary(`Remover Projeto — Filtrar  ${theme.muted('(Enter vazio = ver todos)')}`),
+        placeholder: 'Digite o nome do projeto...',
+        defaultValue: searchQuery,
+      });
+
+      if (wasCancelled(searchInput)) {
+        mode = 'browse';
+        searchQuery = '';
+        continue;
+      }
+
+      searchQuery = (searchInput as string).trim().toLowerCase();
+
+      if (searchQuery.length === 0) {
+        mode = 'browse';
+        continue;
+      }
+
+      const filtered = projects.filter((p) => p.name.toLowerCase().includes(searchQuery));
+
+      if (filtered.length === 0) {
+        clack.log.warn(theme.warn(`Nenhum projeto encontrado para "${theme.bold(searchQuery)}".`));
+        continue;
+      }
+
+      const searchOptions: Array<{ value: string; label: string; hint?: string }> = [
+        ...filtered.map((p) => ({
+          value: p.path,
+          label: `${theme.accent(p.name)}`,
+          hint: p.path,
+        })),
+        { value: '__clear__', label: theme.muted('← Limpar filtro  (ver todos)') },
+        { value: '__back__',  label: theme.muted('←  Cancelar remoção') },
+      ];
+
+      const searchSelected = await clack.select({
+        message: theme.primary(`${filtered.length} resultado(s). Qual projeto deseja remover?`),
+        options: searchOptions,
+      });
+
+      if (wasCancelled(searchSelected) || searchSelected === '__back__') return;
+      if (searchSelected === '__clear__') {
+        mode = 'browse';
+        searchQuery = '';
+        continue;
+      }
+
+      await confirmAndRemove(searchSelected as string, projects);
+      return; // sai após remover (ou cancelar na confirmação final)
+    }
+
+    // ── Modo Browse ────────────────────────────────────────────────────────
+    const browseOptions: Array<{ value: string; label: string; hint?: string }> = [
+      { value: '__search__', label: `${theme.accent('🔍')}  Filtrar por nome…` },
+      ...projects.map((p) => ({
+        value: p.path,
+        label: `${theme.accent(p.name)}`,
+        hint: p.path,
+      })),
+      { value: '__back__',   label: theme.muted('←  Cancelar remoção') },
+    ];
+
+    const browseSelected = await clack.select({
+      message: theme.primary(`Qual projeto deseja remover?  ${theme.muted(`— ${projects.length} registrado(s)  ·  ↑↓ navegar`)}`),
+      options: browseOptions,
+    });
+
+    if (wasCancelled(browseSelected) || browseSelected === '__back__') return;
+
+    if (browseSelected === '__search__') {
+      mode = 'search';
+      searchQuery = '';
+      continue;
+    }
+
+    await confirmAndRemove(browseSelected as string, projects);
+    return; // sai após remover
   }
+}
 
-  // Opção de voltar + lista de projetos
-  const options = [
-    ...projects.map((p) => ({
-      value: p.path,
-      label: `${theme.accent(p.name)}`,
-      hint: p.path,
-    })),
-    {
-      value: '__back__',
-      label: theme.muted('← Voltar'),
-    },
-  ];
+async function confirmAndRemove(selectedPath: string, projects: readonly Project[]): Promise<void> {
+  const project = projects.find((p) => p.path === selectedPath);
+  if (!project) return;
 
-  const selected = await clack.select({
-    message: theme.primary('Qual projeto deseja remover?'),
-    options,
-  });
-
-  if (wasCancelled(selected) || selected === '__back__') {
-    clack.log.info(theme.muted('Operação cancelada.'));
-    return;
-  }
-
-  const selectedPath = selected as string;
-
-  // Confirmação
   const confirm = await clack.confirm({
-    message: theme.warn(`Remover "${path.basename(selectedPath)}" do registry?`),
+    message: theme.warn(`Remover "${project.name}" do registry?`),
     initialValue: false,
   });
 
-  if (wasCancelled(confirm)) {
-    clack.log.info(theme.muted('Operação cancelada.'));
-    return;
-  }
-
-  if (!confirm) {
+  if (wasCancelled(confirm) || !confirm) {
     clack.log.info(theme.muted('Operação cancelada.'));
     return;
   }

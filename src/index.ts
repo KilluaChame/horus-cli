@@ -225,37 +225,37 @@ async function showInteractiveMenu(): Promise<void> {
         {
           value: 'recent',
           label: `${theme.accent('⭐')}  Mais Acessados`,
-          hint: 'Acesso rápido aos últimos 5 projetos utilizados',
+          hint: 'Acesso rápido',
         },
         {
           value: 'projects',
-          label: `${theme.white('≡')}  Projetos  ${theme.muted('(busca por nome habilitada)')}`,
-          hint: 'Navega, filtra por texto e entra em qualquer projeto registrado',
+          label: `${theme.white('≡')}  Projetos`,
+          hint: 'Navegar e filtrar',
         },
         {
           value: 'run',
           label: `${theme.success('▶')}  Executar comando rápido`,
-          hint: 'Usa o projeto do cwd atual, ou escolhe da lista',
+          hint: 'Descobre scripts no projeto atual',
         },
         {
           value: 'add',
           label: `${theme.accent('+')}  Registrar novo projeto`,
-          hint: 'Pasta atual ou caminho manual (Validação FS + Zod)',
+          hint: 'Adicionar pasta atual ou manual',
         },
         {
           value: 'remove',
           label: `${theme.warn('−')}  Remover projeto`,
-          hint: 'Desvincula sem apagar o diretório real',
+          hint: 'Desvincular do registro',
         },
         {
           value: 'init',
           label: `${theme.accent('✦')}  Inicializar horus.json`,
-          hint: 'Gera configuração no projeto atual (IA na Fase 9)',
+          hint: 'Configuração flexível',
         },
         {
           value: 'help',
           label: `${theme.muted('?')}  Ajuda & Atalhos`,
-          hint: 'Atalhos, comandos diretos e discovery engine',
+          hint: 'Manual do sistema',
         },
         {
           value: 'exit',

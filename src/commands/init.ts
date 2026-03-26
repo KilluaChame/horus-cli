@@ -14,6 +14,7 @@ import * as path from 'node:path';
 import { theme } from '../ui/theme.js';
 import { wasCancelled, handleCancel } from '../ui/prompts.js';
 import { HorusConfigSchema } from '../core/parser.js';
+import { selectRegisteredProject } from './register.js';
 
 // ─── Tipos internos ───────────────────────────────────────────────────────────
 
@@ -28,8 +29,22 @@ interface TaskDraft {
 
 export async function handleInitCommand(flags: string[]): Promise<void> {
   const isAiMode = flags.includes('--ai');
-  const cwd      = process.cwd();
-  const outPath  = path.join(cwd, 'horus.json');
+
+  // Seleção de diretório alvo (Smart Init v2)
+  const targetCwd = await promptTargetDirectory();
+  if (!targetCwd) return; // cancelado
+
+  const outPath = path.join(targetCwd, 'horus.json');
+
+  // Muda o contexto virtualmente antes de prosseguir
+  if (process.cwd() !== targetCwd) {
+    try {
+      process.chdir(targetCwd);
+    } catch {
+      clack.log.error(theme.error(`✗ Erro ao acessar o diretório: ${targetCwd}`));
+      return;
+    }
+  }
 
   // Aviso se já existe
   if (fs.existsSync(outPath)) {
@@ -45,10 +60,91 @@ export async function handleInitCommand(flags: string[]): Promise<void> {
   }
 
   if (isAiMode) {
-    await runAiInit(cwd, outPath);
+    await runAiInit(targetCwd, outPath);
   } else {
-    await runInteractiveInit(cwd, outPath);
+    await runInteractiveInit(targetCwd, outPath);
   }
+}
+
+// ─── Seleção de Diretório ───────────────────────────────────────────────────
+
+async function promptTargetDirectory(): Promise<string | null> {
+  const cwd = process.cwd();
+  const cwdBasename = path.basename(cwd);
+
+  const source = await clack.select({
+    message: theme.primary('Onde deseja inicializar o horus.json?'),
+    options: [
+      {
+        value: 'cwd',
+        label: `${theme.success('●')}  Utilizar diretório atual`,
+        hint: `${cwdBasename} — ${cwd}`,
+      },
+      {
+        value: 'registry',
+        label: `${theme.accent('≡')}  Escolher de um projeto registrado`,
+        hint: 'Navega e inicializa em um projeto existente',
+      },
+      {
+        value: 'manual',
+        label: `${theme.accent('✎')}  Informar outro caminho manualmente`,
+        hint: 'Validação de caminho via FS',
+      },
+      {
+        value: 'cancel',
+        label: theme.muted('← Cancelar inicialização'),
+      },
+    ],
+  });
+
+  if (wasCancelled(source) || source === 'cancel') {
+    clack.log.info(theme.muted('Inicialização cancelada.'));
+    return null;
+  }
+
+  if (source === 'cwd') {
+    return cwd;
+  }
+
+  if (source === 'registry') {
+    const project = await selectRegisteredProject();
+    if (!project) {
+      clack.log.info(theme.muted('Inicialização cancelada (Nenhum projeto selecionado).'));
+      return null;
+    }
+    return project.path;
+  }
+
+  // Entrada manual de caminho
+  const manualInput = await clack.text({
+    message: theme.primary('Informe o caminho completo do projeto:'),
+    placeholder: `${process.platform === 'win32' ? 'C:\\projetos\\meu-app' : '/home/user/projetos/meu-app'}`,
+    validate: (value) => {
+      if (!value || value.trim().length === 0) {
+        return 'O caminho não pode estar vazio.';
+      }
+
+      const resolved = path.resolve(value.trim());
+
+      if (!fs.existsSync(resolved)) {
+        return `Caminho não encontrado: ${resolved}`;
+      }
+
+      const stat = fs.statSync(resolved);
+      if (!stat.isDirectory()) {
+        return `O caminho não é um diretório: ${resolved}`;
+      }
+
+      return undefined;
+    },
+  });
+
+  if (wasCancelled(manualInput)) {
+    clack.log.info(theme.muted('Inicialização cancelada.'));
+    return null;
+  }
+
+  return path.resolve((manualInput as string).trim());
 }
 
 // ─── Modo Interativo ─────────────────────────────────────────────────────────

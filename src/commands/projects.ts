@@ -96,7 +96,7 @@ export async function handleRecentProjects(): Promise<void> {
  */
 export async function handleProjectNavigator(): Promise<void> {
   type NavMode = 'browse' | 'search';
-  let mode: NavMode = 'browse';
+  let mode: NavMode = 'browse'; // Inicia com a lista completa, mas com foco no filtro
   let searchQuery = '';
 
   while (true) {
@@ -176,12 +176,12 @@ export async function handleProjectNavigator(): Promise<void> {
 
     // ── Modo Browse (padrão — navegar por setas ↑↓) ────────────────────────
     const browseOptions: Array<{ value: string; label: string; hint?: string }> = [
+      { value: '__search__', label: `${theme.accent('🔍')}  Filtrar por nome…` },
       ...remaining.map((p) => ({
         value: p.path,
         label: formatProjectLabel(p.name, getProjectHealth(p.path)),
-        hint: path.relative(process.cwd(), p.path) || p.path,
+        hint: p.path,
       })),
-      { value: '__search__', label: `${theme.accent('🔍')}  Filtrar por nome…` },
       { value: '__back__',   label: theme.muted('←  Voltar ao menu principal') },
     ];
 
