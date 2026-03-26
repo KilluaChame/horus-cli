@@ -354,7 +354,7 @@ async function runPromptExport(cwd: string): Promise<void> {
   const { scanRepository, buildSystemPrompt } = await import('../core/ai-agent.js');
   
   const projectName = path.basename(cwd);
-  const summary = scanRepository(cwd);
+  const summary = await scanRepository(cwd);
   const promptRaw = buildSystemPrompt(summary, projectName);
   
   s.stop(theme.success('📋 Prompt para Geração de horus.json finalizado com sucesso!'));

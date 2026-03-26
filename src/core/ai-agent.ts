@@ -15,6 +15,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as fsPromises from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { z } from 'zod';
@@ -63,56 +64,110 @@ const DANGEROUS_PATTERNS = [
 
 // ─── Scanner de Repositório ──────────────────────────────────────────────────
 
+async function readHead(filePath: string, maxLines: number = 20): Promise<string[]> {
+  try {
+    const handle = await fsPromises.open(filePath, 'r');
+    const buffer = Buffer.alloc(4096);
+    const { bytesRead } = await handle.read(buffer, 0, 4096, 0);
+    await handle.close();
+    const content = buffer.toString('utf-8', 0, bytesRead);
+    return content.split(/\r?\n/).slice(0, maxLines);
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Produz um sumário compacto do projeto para enviar ao LLM.
- * Varre apenas 2 níveis de profundidade para manter o payload pequeno.
+ * Varre também heurísticas "perto do código".
  */
-export function scanRepository(cwd: string): string {
-  const lines: string[] = [];
-  const entries = (() => {
-    try {
-      return fs.readdirSync(cwd, { withFileTypes: true });
-    } catch {
-      return [];
-    }
-  })();
+export async function scanRepository(cwd: string): Promise<string> {
+  const linesOut: string[] = [];
+  
+  let entries: fs.Dirent[] = [];
+  try {
+    entries = await fsPromises.readdir(cwd, { withFileTypes: true });
+  } catch {
+    return '';
+  }
 
   // 1. Arquivos de indicador de stack (nível raiz)
   const ROOT_INDICATORS = new Set([
     'package.json', 'pyproject.toml', 'requirements.txt',
     'Cargo.toml', 'go.mod', 'Makefile', 'Dockerfile',
     'docker-compose.yml', 'docker-compose.yaml',
-    'pom.xml', 'build.gradle',
+    'pom.xml', 'build.gradle', 'next.config.js', 'vite.config.ts', 'vite.config.js',
+    'prisma/schema.prisma'
   ]);
 
   const indicatorsFound: string[] = [];
   const executablesFound: string[] = [];
+  
+  const filesToReadHead: string[] = [];
 
   // Extensões que costumam representar entrypoints ou scripts ou stacks
   const STACK_EXT = new Set(['.sln', '.csproj', '.fsproj', '.vbproj', '.csproj.user']);
-  const EXEC_EXT = new Set(['.exe', '.bat', '.ps1', '.sh', '.py', '.au3', '.cmd']);
+  const EXEC_EXT = new Set(['.exe', '.bat', '.ps1', '.sh', '.py', '.au3', '.cmd', '.js', '.ts']);
+  
+  // Diretórios para deep discovery
+  const DEEP_DISCOVERY_DIRS = new Set(['scripts', 'bin', 'tools']);
 
   for (const e of entries) {
     if (e.isFile()) {
       const ext = path.extname(e.name).toLowerCase();
       if (ROOT_INDICATORS.has(e.name) || STACK_EXT.has(ext)) {
         indicatorsFound.push(e.name);
-      } else if (EXEC_EXT.has(ext)) {
+      } 
+      if (EXEC_EXT.has(ext)) {
         executablesFound.push(e.name);
       }
+      
+      if (e.name.toLowerCase() === 'makefile' || e.name.toLowerCase().startsWith('docker-compose')) {
+        filesToReadHead.push(path.join(cwd, e.name));
+      } else if (EXEC_EXT.has(ext) || ext === '') {
+        filesToReadHead.push(path.join(cwd, e.name));
+      }
+    } else if (e.isDirectory() && DEEP_DISCOVERY_DIRS.has(e.name)) {
+      try {
+        const subEntries = await fsPromises.readdir(path.join(cwd, e.name), { withFileTypes: true });
+        for (const subE of subEntries) {
+          if (subE.isFile()) {
+            const subExt = path.extname(subE.name).toLowerCase();
+            if (EXEC_EXT.has(subExt) || subExt === '') {
+              filesToReadHead.push(path.join(cwd, e.name, subE.name));
+              executablesFound.push(`${e.name}/${subE.name}`);
+            }
+          }
+        }
+      } catch { /* silencioso */ }
     }
   }
 
-  if (indicatorsFound.length) lines.push(`[STACK FILES] ${indicatorsFound.join(', ')}`);
-  if (executablesFound.length) lines.push(`[EXECUTABLES] ${executablesFound.join(', ')}`);
+  // Verificar caminhos absolutos extras (Next, Prisma, Vite)
+  for (const extra of ['next.config.js', 'vite.config.ts', 'prisma/schema.prisma']) {
+    const p = path.join(cwd, extra);
+    if (fs.existsSync(p)) {
+      if (!indicatorsFound.includes(extra)) indicatorsFound.push(extra);
+      filesToReadHead.push(p);
+    }
+  }
 
-  // Extrair resumo do README se existir para contexto
+  if (indicatorsFound.length) linesOut.push(`[STACK FILES] ${indicatorsFound.join(', ')}`);
+  if (executablesFound.length) linesOut.push(`[EXECUTABLES] ${executablesFound.join(', ')}`);
+
+  // Extrair README (Quick Start / Deploy)
   const readmePath = entries.find((e) => e.name.toLowerCase().startsWith('readme.md'))?.name;
   if (readmePath) {
     try {
-      const readme = fs.readFileSync(path.join(cwd, readmePath), 'utf-8');
-      const snippet = readme.slice(0, 1500); // 1500 chars = equilíbrio ideal entre contexto útil e payload não-gigante
-      lines.push(`[README EXTRACT]\n${snippet}\n[END README]`);
+      const readme = await fsPromises.readFile(path.join(cwd, readmePath), 'utf-8');
+      const snippet = readme.slice(0, 1500); 
+      linesOut.push(`[README EXTRACT]\n${snippet}\n[END README]`);
+      
+      const regex = /(?:##|\n#)\s*(?:deploy(?:ment)?|quick\s*start|getting\s*started).*?\n(.*?)(?=\n#|$)/is;
+      const match = readme.match(regex);
+      if (match && match[1]) {
+        linesOut.push(`[README DEPLOY/QUICKSTART SECTION]\n${match[1].slice(0, 1000)}\n[END DEPLOY SECTION]`);
+      }
     } catch { /* Ignora erro ao ler README */ }
   }
 
@@ -120,82 +175,143 @@ export function scanRepository(cwd: string): string {
   const pkgPath = path.join(cwd, 'package.json');
   if (fs.existsSync(pkgPath)) {
     try {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as {
+      const pkg = JSON.parse(await fsPromises.readFile(pkgPath, 'utf-8')) as {
         name?: string;
         description?: string;
         scripts?: Record<string, string>;
         dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
       };
-      if (pkg.name) lines.push(`[NAME] ${pkg.name}`);
-      if (pkg.description) lines.push(`[DESC] ${pkg.description}`);
+      if (pkg.name) linesOut.push(`[NAME] ${pkg.name}`);
+      if (pkg.description) linesOut.push(`[DESC] ${pkg.description}`);
 
       const notableDeps = Object.keys(pkg.dependencies ?? {})
         .filter((d) => !d.startsWith('@types/'))
         .slice(0, 30);
-      if (notableDeps.length) lines.push(`[DEPS] ${notableDeps.join(', ')}`);
+      if (notableDeps.length) linesOut.push(`[DEPS] ${notableDeps.join(', ')}`);
+      
+      const notableDevDeps = Object.keys(pkg.devDependencies ?? {})
+        .filter((d) => !d.startsWith('@types/'))
+        .slice(0, 30);
+      if (notableDevDeps.length) linesOut.push(`[DEV DEPS] ${notableDevDeps.join(', ')}`);
 
       const NPM_HOOKS = /^(pre|post)\w+$/;
       const scripts = Object.entries(pkg.scripts ?? {})
         .filter(([k]) => !NPM_HOOKS.test(k))
         .map(([k, v]) => `  "${k}": "${v}"`);
       if (scripts.length) {
-        lines.push('[SCRIPTS]');
-        lines.push(...scripts);
+        linesOut.push('[SCRIPTS]');
+        linesOut.push(...scripts);
       }
     } catch { /* JSON malformado ignora */ }
   }
 
-  // 3. Subdiretórios dos 2 primeiros níveis
+  // 3. Subdiretórios gerais
   const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '__pycache__', '.venv']);
   const dirs = entries
     .filter((e) => e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith('.'))
     .map((e) => e.name)
     .slice(0, 10);
 
-  if (dirs.length) lines.push(`[DIRS] ${dirs.join(', ')}`);
+  if (dirs.length) linesOut.push(`[DIRS] ${dirs.join(', ')}`);
+  
+  // 4. Heurística "Perto do Código" (Limite concorrência pra performance)
+  const limit = 10;
+  let active = 0;
+  const headsToRead = Array.from(new Set(filesToReadHead)).slice(0, 30); 
+  const headResults: { file: string; lines: string[] }[] = [];
 
-  return lines.join('\n');
+  await new Promise<void>((resolve) => {
+    let index = 0;
+    const next = async () => {
+      if (index >= headsToRead.length) {
+        if (active === 0) resolve();
+        return;
+      }
+      const file = headsToRead[index++] as string;
+      active++;
+      const lines = await readHead(file, 20);
+      if (lines.length > 0) headResults.push({ file: path.relative(cwd, file).replace(/\\/g, '/'), lines });
+      active--;
+      next();
+    };
+    for (let i = 0; i < limit && i < headsToRead.length; i++) next();
+    if (headsToRead.length === 0) resolve();
+  });
+
+  for (const result of headResults) {
+    const codeInfo: string[] = [];
+    for (const l of result.lines) {
+      if (l.startsWith('#!')) codeInfo.push(`Shebang: ${l}`);
+      if (l.includes('NODE_ENV=') || l.includes('APP_ENV=')) codeInfo.push(`EnvVars: ${l.trim()}`);
+      if (result.file.toLowerCase().includes('makefile') && /^[a-zA-Z0-9_-]+:/.test(l)) {
+        codeInfo.push(`Make Target: ${l.trim()}`);
+      }
+      if (result.file.toLowerCase().includes('docker-compose') && /^\s*[a-zA-Z0-9_-]+:/.test(l)) {
+        codeInfo.push(`Compose Svc: ${l.trim()}`);
+      }
+    }
+    if (codeInfo.length) {
+      linesOut.push(`[FILE INFO: ${result.file}]`);
+      linesOut.push(...codeInfo);
+    }
+  }
+
+  return linesOut.join('\n');
 }
 
 // ─── System Prompt ───────────────────────────────────────────────────────────
 
 export function buildSystemPrompt(projectSummary: string, projectName: string): string {
   return `
-Você é um especialista em DevOps e Developer Experience (DX). Analise o seguinte contexto de projeto e gere um objeto JSON válido no formato especificado abaixo.
+Você é um Engenheiro de IA e Arquiteto de Sistemas Sênior especializado em Análise Estática de Código e Engenharia de Prompt, responsável por formatar e descobrir Tarefas (Tasks) a partir do contexto de um projeto.
+Atue como um tradutor de UX para o comando "hrs", que utiliza o "@discovery-engine". Priorize a intenção semântica sobre a sintaxe bruta e explore arquivos ocultos e padrões.
 
-## Contexto Extraído do Diretório
+## Contexto Extraído do Diretório (Mapa de Intenções)
 \`\`\`
 ${projectSummary}
 \`\`\`
 
-## REGRAS CRÍTICAS DE INFERÊNCIA
-- NÃO ALUCINE TAREFAS. Se você NÃO ver um "package.json", NÃO gere comandos como "npm install" ou "npm run dev".
-- Se você NÃO ver um "Dockerfile", NÃO gere "docker run" ou "docker build".
-- Se o projeto possuir arquivos em [EXECUTABLES] (.exe, .bat, .au3, .sh, .py), CRIE tarefas diretas que executem ou manipulem esses arquivos! Exemplo: Para um arquivo "Launcher_GUI_1.1.exe", crie a task "Launcher_GUI_1.1.exe" no Windows.
-- Para abrir executáveis no Windows powershell, o comando muitas vezes é apenas o nome do executável, ex: ".\\Launcher_GUI_1.1.exe".
+## CADEIA DE PENSAMENTO (CHAIN-OF-THOUGHT)
+1. **Identificação da Stack**: Determine a tecnologia base (ex: Node.js, Next.js, Go, Rust, Python, Docker).
+2. **Descoberta de Ferramentas Ocultas**: Analise scripts em \`./bin\`, \`./scripts\`, aliases (.sh, .py, Executáveis, Shebang) ou arquivos de configuração (ex: next.config.js, docker-compose.yml, Makefile) mencionados no contexto. Se houver informações do README, identifique instruções de "Deploy" ou "Quick Start".
+3. **Categorização e Tradução**: Agrupe as tarefas em grupos específicos (Essential, Development, Database, Utility, etc) e descubra a "intenção real" de cada comando. (ex: \`docker-compose up -d\` é a intenção de "Subir Infraestrutura").
 
-## Regras Obrigatórias do JSON
-1. Retorne SOMENTE o JSON, sem markdown, sem blocos de código, sem comentários.
+## REGRAS CRÍTICAS DE INFERÊNCIA
+- NÃO ALUCINE TAREFAS. Somente gere comandos para os quais exista suporte comprovado pelo contexto (ex: se não há \`package.json\`, não sugira \`npm install\`).
+- Crie tarefas diretas para executáveis e scripts encontrados (incluindo extensões omitidas mapeadas por Shebang). Exemplo: Se há "./scripts/deploy.sh", gere a task que executa o shell script.
+- Para comandos do Windows, use a sintaxe correta do powershell (".\\\\script.ps1" ou ".\\\\App.exe").
+- Extraia tarefas baseadas em "Make Target" ou "Compose Svc" caso encontre Makefiles ou docker-compose.yml.
+
+## REGRAS OBRIGATÓRIAS DO JSON
+1. Retorne SOMENTE o JSON, sem markdown, sem blocos de código (exceto se a API for em JSON bruto), sem comentários.
 2. O JSON deve seguir EXATAMENTE este schema:
 {
   "name": "string (nome legível do projeto, sem underlines)",
   "description": "string (descrição concisa, max 80 chars, use Dicas do README.md se houver)",
   "tasks": [
     {
-      "label": "string (emoji + nome amigável, max 40 chars)",
+      "label": "string ([Ícone de Intenção] [Ação Amigável] ([Tecnologia]), max 50 chars)",
       "cmd": "string (comando shell exato para executar)",
       "hint": "string (opcional, instrução clara do que isso faz)",
-      "group": "string (opcional: Desenvolvimento | Executáveis | Build | Testes | Deploy | Utilidades)"
+      "group": "string (Essential | Development | Database | Utility | Build | Deploy | Git | Automação)"
     }
   ]
 }
 
-3. Use emojis relevantes: Executável = ⚙️  | Python = 🐍 | JS/TS = 📦 | Shell/Bat = 🪟 | Docker = 🐳 | .NET = 🟣
-4. Gere no máximo 15 tasks relevantes. Filtre as inúteis.
-5. O campo "name" deve ser derivado do contexto ou "${projectName}".
-6. NÃO inclua comandos destrutivos (rm -rf, del /s /q, Format C:, etc).
-7. Se houver arquivos .sln ou .csproj, gere tarefas .NET como: "dotnet build", "dotnet run", "dotnet test", "dotnet publish -c Release".
-8. Se houver arquivos .bat, .ps1 ou .cmd, gere tarefas que os executem diretamente (ex: ".\\run.bat").
+3. Mapeamento de Ícones Obrigatório no "label":
+    - 🚀 Iniciar/Subir (Infra ou App)
+    - 🏗️ Build/Compilação
+    - 🧪 Testes Unitários/E2E
+    - 🔍 Lint/Typecheck/Qualidade
+    - 📦 Deploy/Release
+    - 🗄️ Banco de Dados/Migrações
+    - ⚙️  Executável/Script Genérico
+
+4. Exemplo de tradução no label: "🚀 Subir Infraestrutura (Docker)" ou "📦 Publicar (npm)".
+5. Gere no máximo 15 tasks relevantes. Omitir as menos importantes.
+6. O campo "name" deve ser derivado do contexto ou "${projectName}".
+7. NÃO inclua comandos destrutivos (rm -rf, del /s /q, Format C:, etc).
 `.trim();
 }
 
@@ -305,7 +421,7 @@ async function callAiProvider(prompt: string): Promise<string> {
   if (groqKey && !text) {
     try {
       const { Groq } = await import('groq-sdk');
-      const groq = new Groq({ apiKey: groqKey });
+      const groq = new Groq({ apiKey: groqKey as string });
       const model = process.env['GROQ_MODEL'] || 'llama-3.1-8b-instant';
       const completion = await groq.chat.completions.create({
         messages: [{ role: 'user', content: prompt }],
@@ -328,7 +444,7 @@ async function callAiProvider(prompt: string): Promise<string> {
   if (geminiKey && !text) {
     try {
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(geminiKey);
+      const genAI = new GoogleGenerativeAI(geminiKey as string);
       const modelName = process.env['GEMINI_MODEL'] || 'gemini-2.0-flash';
       const model = genAI.getGenerativeModel({
         model: modelName,
@@ -365,7 +481,7 @@ export async function runAiDiscovery(cwd: string): Promise<AiAgentOutcome> {
   const projectName = path.basename(cwd);
 
   // 1. Escanear repositório
-  const summary = scanRepository(cwd);
+  const summary = await scanRepository(cwd);
   const prompt = buildSystemPrompt(summary, projectName);
 
   // 2. Chamar o LLM
