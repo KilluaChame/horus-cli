@@ -169,44 +169,9 @@ function showHelp(): void {
   );
 }
 
-async function handleReadmeCommand(): Promise<void> {
-  const cwd = process.cwd();
-  try {
-    const entries = fs.readdirSync(cwd, { withFileTypes: true });
-    const readmeFile = entries.find((e) => e.isFile() && e.name.toLowerCase().startsWith('readme.md'));
-    
-    if (!readmeFile) {
-      clack.log.warn(theme.warn('Nenhum arquivo README.md encontrado neste diretório.'));
-      // Press any key to continue
-      await clack.text({
-        message: theme.muted('▶ Pressione Enter para voltar ao menu...'),
-      });
-      return;
-    }
-
-    const content = fs.readFileSync(path.join(cwd, readmeFile.name), 'utf-8');
-    
-    // Trunca para evitar flood no terminal (clack.note não tem scroll)
-    const MAX_DISPLAY = 3000;
-    const display = content.length > MAX_DISPLAY
-      ? content.slice(0, MAX_DISPLAY).trimEnd() + '\n\n' + theme.muted(`… (truncado em ${MAX_DISPLAY} chars — use "cat ${readmeFile.name}" para o completo)`)
-      : content.trim() || '(README vazio)';
-
-    clack.log.info(theme.primary(`📖 ${readmeFile.name} (${(content.length / 1024).toFixed(1)} KB)`));
-    console.log(theme.muted('  ' + '─'.repeat(60)));
-    console.log(theme.white(display));
-    console.log(theme.muted('  ' + '─'.repeat(60)));
-
-    // Espera o usuário ler
-    await clack.text({
-      message: theme.muted('▶ Pressione Enter para voltar ao menu...'),
-    });
-  } catch (err) {
-    clack.log.error(theme.error(`Falha ao ler o diretório/README: ${String(err)}`));
-    await clack.text({
-      message: theme.muted('▶ Pressione Enter para voltar ao menu...'),
-    });
-  }
+async function lazyHandleReadmeCommand(): Promise<void> {
+  const { handleReadmeCommand } = await import('./commands/view-readme.js');
+  await handleReadmeCommand();
 }
 
 function showInlineHelp(): void {
@@ -390,7 +355,7 @@ async function showInteractiveMenu(): Promise<void> {
         break;
         
       case 'README':
-        await handleReadmeCommand();
+        await lazyHandleReadmeCommand();
         appState = 'HOME';
         break;
 
