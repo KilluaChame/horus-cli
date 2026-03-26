@@ -13,8 +13,10 @@
 | **Fase 1** | Setup da CLI e Estrutura Cross-Platform | ✅ **Concluída** | 2026-03-25 |
 | **Fase 2** | Registry — O Mapa de Projetos Universal | ✅ **Concluída** | 2026-03-25 |
 | **Fase 3** | Discovery Engine — O Motor de Busca | ✅ **Concluída** | 2026-03-25 |
-| **Fase 4** | Executor Proxy e Tratamento de Processos | 🔄 **Em andamento** | — |
-| **Fase 5** | Distribuição e Empacotamento | 📋 Planejada | — |
+| **Fase 4** | Executor Proxy e Tratamento de Processos | ✅ **Concluída** | 2026-03-25 |
+| **Fase 5** | Distribuição e Empacotamento | ✅ **Concluída** | 2026-03-25 |
+
+> 🎉 **Status Geral: MVP do Horus CLI Concluído e Estável.**
 
 ---
 
@@ -130,27 +132,26 @@ hrs help               # ≡ hrs -h, hrs --help
 
 ---
 
-## Fase 4 — Executor Proxy 🔄 (Próxima)
+## Fase 4 — Executor Proxy ✅
 
-### Objetivo
+### O que foi construído
 
-Construir o Executor do Proxy de Comandos, permitindo a comunicação e a injeção nativa de processos-filhos vindos das requisições geradas pelo Parser, usando a dependência `execa`.
+- `src/core/executor.ts` construído encapsulando `execa`.
+- Implementado controle de duplo tráfego para processamento isolado: separando o `split` seguro para passagem de argumentos limpos (`extraArgs`) contra processos shell completos com pipes, os quais bloqueiam argumentos de array.
+- A diretiva `stdio: 'inherit'` preservou *Progress Bars, Interactive Shells e Cores Nativo* de comandos como React e Vite.
+- Abortos via `SIGINT` (Ctrl+C no processo rodando) e falhas brutas do comando original processam elegantemente sem disparar Node Errors.
+- Adição global de dupla chamada via bin: `"hrs"` e `"horus"`.
 
-**Dependência principal**: `execa` (adicionar ao bundle via `noExternal`)
+---
 
-### Comportamentos planejados
+## Fases Futuras
 
-- Encapsular chamadas por processo filho usando: `execa(cmd, { stdio: 'inherit', shell: true, cwd: projectPath })`
-- Proteger execuções com tratamento de exceções do node (`try/catch`).
-- Tratamento explícito de `exit code` ≠ 0 com mensagem de erro elegante sem causar "Crash do CLI".
-- Passagem de argumentos adicionais para comandos usando wildcard (Ex: `hrs run -- --force`)
+### Fase 5 — Distribuição ✅
 
-### Fase 5 — Distribuição
-
-- Publicação no npm registry como `horus-cli`
-- `npx horus-cli` para uso sem instalação
-- `npm install -g horus-cli` para instalação permanente
-- README com badge de npm version e download count
+- Publicação documentada no README.
+- Suporte duplo ao CLI com os apelidos oficiais (`hrs` e `horus`).
+- Estrutura otimizada para npm global.
+- Documentação "O Problema", Instalação, Guias e Fallback (`horus.json`) consolidada para leitura de programadores finais.
 
 ---
 
@@ -191,15 +192,15 @@ m:/Projetos/Horus/
 ├── src/
 │   ├── core/
 │   │   ├── registry.ts           ✅ Fase 2 — CRUD + Zod + escrita atômica
-│   │   ├── parser.ts             ✅ Fase 3 — Fallbacks e schemas (package.json)
-│   │   └── executor.ts           📋 Stub — implementar na Fase 4
+│   │   ├── parser.ts             ✅ Fase 3 — Fallbacks e schemas
+│   │   └── executor.ts           ✅ Fase 4 — Wrapper execa com inherit e sinal
 │   ├── ui/
 │   │   ├── theme.ts              ✅ Fase 1 — paleta + banner + saudação
 │   │   └── prompts.ts            ✅ Fase 1 — abstrações @clack
 │   ├── commands/
 │   │   ├── register.ts           ✅ Fase 2 — add + list + remove
-│   │   └── run.ts                ✅ Fase 3 — Loop de sessão, discovery orquestrado
-│   └── index.ts                  ✅ Fase 3 — hrs run roteado e executado
+│   │   └── run.ts                ✅ Fase 3/4 — Loop de sessão, discovery + executor
+│   └── index.ts                  ✅ Fase 4 — Parser e extraArgs repassados
 ├── docs/
 │   ├── PRD-Horus.md              ✅ Requisitos do produto
 │   ├── tasks.md                  ✅ Contrato horus.json + fallback

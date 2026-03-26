@@ -49,7 +49,7 @@ async function handleSubcommand(parsed: ParsedArgs): Promise<boolean> {
   switch (parsed.command) {
     case 'run': {
       renderBanner();
-      await handleRunCommand();
+      await handleRunCommand(parsed.args);
       clack.outro(theme.muted('👁️  horus encerrado. Até a próxima!'));
       return true;
     }
@@ -168,7 +168,8 @@ async function showInteractiveMenu(): Promise<void> {
 
   switch (action) {
     case 'run':
-      await handleRunCommand();
+      // Se chamado diretamente do menu inicial, extraArgs = []
+      await handleRunCommand([]);
       break;
 
     case 'add':

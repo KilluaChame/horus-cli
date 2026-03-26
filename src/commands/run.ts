@@ -1,11 +1,11 @@
 /**
- * run.ts — Lógica principal de execução interativa (Fase 3)
+ * run.ts — Lógica principal de execução interativa (Fase 3 + Fase 4)
  *
  * Orquestra o fluxo completo:
  *   1. Detecta o projeto alvo (cwd ou seleção do registry)
  *   2. Roda o Discovery Engine (parser.ts)
  *   3. Apresenta o menu de tarefas via @clack/prompts
- *   4. Stub de execução (Fase 4 implementará execa)
+ *   4. Delega ao Executor Proxy (executor.ts) com stdio: 'inherit'
  *
  * Regra de performance: este módulo é importado LAZILY no index.ts
  * (só quando o usuário escolhe "Executar" no menu principal).
@@ -15,7 +15,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as clack from '@clack/prompts';
 import { discoverTasksWithFallback, type Task } from '../core/parser.js';
-import { listProjects, purgeInvalidProjects } from '../core/registry.js';
+import { purgeInvalidProjects } from '../core/registry.js';
+import { executeCommand, reportExecutionResult } from '../core/executor.js';
 import { theme } from '../ui/theme.js';
 import { wasCancelled, handleCancel } from '../ui/prompts.js';
 
@@ -25,7 +26,7 @@ import { wasCancelled, handleCancel } from '../ui/prompts.js';
  * Ponto de entrada do fluxo "Executar".
  * Chamado tanto pelo menu interativo quanto pelo subcomando `hrs run`.
  */
-export async function handleRunCommand(): Promise<void> {
+export async function handleRunCommand(extraArgs: string[] = []): Promise<void> {
   // 1. Resolve o diretório do projeto alvo
   const projectPath = await resolveProjectPath();
 
@@ -68,7 +69,7 @@ export async function handleRunCommand(): Promise<void> {
   }
 
   // 5. Exibe o menu de tarefas descobertas
-  await showTaskMenu(result.projectName, result.tasks, result.source, projectPath);
+  await showTaskMenu(result.projectName, result.tasks, result.source, projectPath, extraArgs);
 }
 
 // ─── Resolução do projeto alvo ────────────────────────────────────────────────
@@ -143,17 +144,18 @@ async function resolveProjectPath(): Promise<string | null> {
   return selected as string;
 }
 
-// ─── Menu de tarefas ──────────────────────────────────────────────────────────
+// ─── Menu de tarefas ───────────────────────────────────────────────────────────────────────
 
 /**
  * Exibe o menu de seleção de tarefas e aguarda a escolha do usuário.
- * Após seleção, delega para o executor (Fase 4).
+ * Após seleção, delega ao Executor Proxy (executor.ts).
  */
 async function showTaskMenu(
   projectName: string,
   tasks: Task[],
   source: 'horus.json' | 'package.json',
   projectPath: string,
+  extraArgs: string[] = []
 ): Promise<void> {
   const sourceLabel = source === 'horus.json'
     ? theme.success('horus.json')
@@ -195,13 +197,25 @@ async function showTaskMenu(
 
     const cmd = selected as string;
     const task = tasks.find((t) => t.cmd === cmd);
+    const label = task?.label ?? cmd;
 
-    // Delega para o executor
-    await executeTask(cmd, task?.label ?? cmd, projectPath);
+    // Exibe o que vai ser executado e eventuais extras
+    const argsLabel = extraArgs.length > 0 ? ` ${theme.muted(extraArgs.join(' '))}` : '';
+    clack.log.step(
+      `${theme.success('▶')} ${theme.bold(label)}\n` +
+      `   ${theme.muted('$')} ${theme.accent(cmd)}${argsLabel}\n` +
+      `   ${theme.muted('cwd:')} ${theme.muted(projectPath)}`,
+    );
+
+    // Delega ao Executor Proxy (Fase 4)
+    const result = await executeCommand(cmd, { cwd: projectPath, extraArgs });
+
+    // Reporta resultado na UI
+    reportExecutionResult(result, label);
 
     // Após execução, pergunta se deseja continuar (loop de sessão — R5 do PRD)
     const continueSession = await clack.confirm({
-      message: theme.primary('Deseja executar outra tarefa?'),
+      message: theme.primary('Deseja realizar outra operação no projeto?'),
       initialValue: true,
     });
 
@@ -211,45 +225,7 @@ async function showTaskMenu(
   }
 }
 
-// ─── Executor (stub Fase 3 → implementado na Fase 4) ─────────────────────────
-
-/**
- * Executa o comando selecionado.
- *
- * ⚠️  FASE 3 — Stub: exibe o comando e simula execução.
- *     A Fase 4 substituirá por: execa(cmd, { stdio: 'inherit', shell: true, cwd })
- *
- * @param cmd         Comando shell completo (suporta pipes, &&, etc.)
- * @param label       Label legível para exibição
- * @param projectPath Diretório de trabalho para execução
- */
-async function executeTask(
-  cmd: string,
-  label: string,
-  projectPath: string,
-): Promise<void> {
-  clack.log.step(
-    `${theme.success('▶')} ${theme.bold(label)}\n` +
-    `   ${theme.muted('$')} ${theme.accent(cmd)}\n` +
-    `   ${theme.muted('cwd:')} ${theme.muted(projectPath)}`,
-  );
-
-  // TODO: Fase 4 — substituir por:
-  // await execa(cmd, { stdio: 'inherit', shell: true, cwd: projectPath });
-
-  clack.note(
-    [
-      theme.muted('Executor ainda não implementado.'),
-      `${theme.muted('→ Será ativado na')} ${theme.accent('Fase 4')} ${theme.muted('(execa + stdio: inherit)')}`,
-      '',
-      `${theme.muted('Comando que seria executado:')}`,
-      `${theme.accent('$')} ${cmd}`,
-    ].join('\n'),
-    theme.primary('🔮 Fase 4'),
-  );
-}
-
-// ─── Utilitário ───────────────────────────────────────────────────────────────
+// ─── Utilitário ──────────────────────────────────────────────────────────────────────────────
 
 /**
  * Normaliza caminhos para comparação cross-platform.

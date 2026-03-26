@@ -25,6 +25,9 @@ export default defineConfig({
   // Não emitir os node_modules no bundle (são externos)
   // EXCETO: picocolors e @clack/prompts são incluídos para
   // eliminar resolução de módulo em runtime → boot <300ms
+  // Inlinha dependências de UI/validação no bundle para eliminar resolução de módulo em runtime.
+  // NOTA: execa é mantido EXTERNO — usa child_process nativo e não pode ser inlinhado
+  // sem quebrar o dynamic require. O custo é negligível pois é carregado lazy (pós-interação).
   noExternal: ['picocolors', '@clack/prompts', 'zod'],
 
   // Shims para __dirname e __filename em ESM

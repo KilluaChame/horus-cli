@@ -7,7 +7,8 @@
     "node": ">=18.0.0"
   },
   "bin": {
-    "hrs": "./dist/bin/horus.js"
+    "hrs":   "./dist/bin/horus.js",
+    "horus": "./dist/bin/horus.js"
   },
   "files": [
     "dist"
@@ -21,8 +22,9 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.9.1",
-    "picocolors": "^1.1.1",
-    "zod": "^4.3.6"
+    "execa":          "^9.5.2",
+    "picocolors":     "^1.1.1",
+    "zod":            "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
