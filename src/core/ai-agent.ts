@@ -59,23 +59,55 @@ const DANGEROUS_PATTERNS = [
  */
 export function scanRepository(cwd: string): string {
   const lines: string[] = [];
+  const entries = (() => {
+    try {
+      return fs.readdirSync(cwd, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+  })();
 
   // 1. Arquivos de indicador de stack (nível raiz)
-  const ROOT_INDICATORS = [
+  const ROOT_INDICATORS = new Set([
     'package.json', 'pyproject.toml', 'requirements.txt',
     'Cargo.toml', 'go.mod', 'Makefile', 'Dockerfile',
     'docker-compose.yml', 'docker-compose.yaml',
-    '.nvmrc', '.node-version', 'pom.xml', 'build.gradle',
-  ];
+    'pom.xml', 'build.gradle',
+  ]);
 
-  for (const indicator of ROOT_INDICATORS) {
-    const fullPath = path.join(cwd, indicator);
-    if (fs.existsSync(fullPath)) {
-      lines.push(`[FILE] ${indicator}`);
+  const indicatorsFound: string[] = [];
+  const executablesFound: string[] = [];
+  
+  // Extensões que costumam representar entrypoints ou scripts
+  const EXEC_EXT = new Set(['.exe', '.bat', '.ps1', '.sh', '.py', '.au3', '.cmd']);
+
+  for (const e of entries) {
+    if (e.isFile()) {
+      if (ROOT_INDICATORS.has(e.name)) {
+        indicatorsFound.push(e.name);
+      } else {
+        const ext = path.extname(e.name).toLowerCase();
+        if (EXEC_EXT.has(ext)) {
+          executablesFound.push(e.name);
+        }
+      }
     }
   }
 
-  // 2. Scripts do package.json
+  if (indicatorsFound.length) lines.push(`[STACK FILES] ${indicatorsFound.join(', ')}`);
+  if (executablesFound.length) lines.push(`[EXECUTABLES] ${executablesFound.join(', ')}`);
+
+  // Extrair resumo do README se existir para contexto
+  const readmePath = entries.find((e) => e.name.toLowerCase().startsWith('readme.md'))?.name;
+  if (readmePath) {
+    try {
+      const readme = fs.readFileSync(path.join(cwd, readmePath), 'utf-8');
+      const snippet = readme.slice(0, 300).replace(/\n/g, ' '); // Pega só um resumo sem quebrar
+      lines.push(`[README] ${snippet}...`);
+    } catch { /* Ignora erro ao ler README */ }
+  }
+
+  // 2. Scripts do package.json (se existir)
   const pkgPath = path.join(cwd, 'package.json');
   if (fs.existsSync(pkgPath)) {
     try {
@@ -84,13 +116,11 @@ export function scanRepository(cwd: string): string {
         description?: string;
         scripts?: Record<string, string>;
         dependencies?: Record<string, string>;
-        devDependencies?: Record<string, string>;
       };
       if (pkg.name)        lines.push(`[NAME] ${pkg.name}`);
       if (pkg.description) lines.push(`[DESC] ${pkg.description}`);
 
-      const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
-      const notableDeps = Object.keys(allDeps)
+      const notableDeps = Object.keys(pkg.dependencies ?? {})
         .filter((d) => !d.startsWith('@types/'))
         .slice(0, 30);
       if (notableDeps.length) lines.push(`[DEPS] ${notableDeps.join(', ')}`);
@@ -103,19 +133,17 @@ export function scanRepository(cwd: string): string {
         lines.push('[SCRIPTS]');
         lines.push(...scripts);
       }
-    } catch { /* JSON malformado — ignora silenciosamente */ }
+    } catch { /* JSON malformado ignora */ }
   }
 
-  // 3. Subdiretórios dos 2 primeiros níveis de relevância
+  // 3. Subdiretórios dos 2 primeiros níveis
   const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '__pycache__', '.venv']);
-  try {
-    const entries = fs.readdirSync(cwd, { withFileTypes: true });
-    const dirs = entries
-      .filter((e) => e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith('.'))
-      .map((e) => e.name)
-      .slice(0, 10);
-    if (dirs.length) lines.push(`[DIRS] ${dirs.join(', ')}`);
-  } catch { /* sem permissão */ }
+  const dirs = entries
+    .filter((e) => e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith('.'))
+    .map((e) => e.name)
+    .slice(0, 10);
+    
+  if (dirs.length) lines.push(`[DIRS] ${dirs.join(', ')}`);
 
   return lines.join('\n');
 }
@@ -126,38 +154,37 @@ function buildSystemPrompt(projectSummary: string, projectName: string): string 
   return `
 Você é um especialista em DevOps e Developer Experience (DX). Analise o seguinte contexto de projeto e gere um objeto JSON válido no formato especificado abaixo.
 
-## Contexto do Projeto
+## Contexto Extraído do Diretório
 \`\`\`
 ${projectSummary}
 \`\`\`
 
-## Regras Obrigatórias
+## REGRAS CRÍTICAS DE INFERÊNCIA
+- NÃO ALUCINE TAREFAS. Se você NÃO ver um "package.json", NÃO gere comandos como "npm install" ou "npm run dev".
+- Se você NÃO ver um "Dockerfile", NÃO gere "docker run" ou "docker build".
+- Se o projeto possuir arquivos em [EXECUTABLES] (.exe, .bat, .au3, .sh, .py), CRIE tarefas diretas que executem ou manipulem esses arquivos! Exemplo: Para um arquivo "Launcher_GUI_1.1.exe", crie a task "Launcher_GUI_1.1.exe" no Windows.
+- Para abrir executáveis no Windows powershell, o comando muitas vezes é apenas o nome do executável, ex: ".\\Launcher_GUI_1.1.exe".
 
+## Regras Obrigatórias do JSON
 1. Retorne SOMENTE o JSON, sem markdown, sem blocos de código, sem comentários.
 2. O JSON deve seguir EXATAMENTE este schema:
 {
-  "name": "string (nome legível do projeto)",
-  "description": "string (descrição concisa, max 80 chars)",
+  "name": "string (nome legível do projeto, sem underlines)",
+  "description": "string (descrição concisa, max 80 chars, use Dicas do README se houver)",
   "tasks": [
     {
       "label": "string (emoji + nome amigável, max 40 chars)",
-      "cmd": "string (comando shell exato)",
-      "hint": "string (opcional, o que o comando faz, max 60 chars)",
-      "group": "string (opcional, categoria: Desenvolvimento | Build | Testes | Deploy | Docker | Git | Banco de Dados | Utilitários)"
+      "cmd": "string (comando shell exato para executar)",
+      "hint": "string (opcional, instrução clara do que isso faz)",
+      "group": "string (opcional: Desenvolvimento | Executáveis | Build | Testes | Deploy | Utilidades)"
     }
   ]
 }
 
-3. Use emojis relevantes à stack: 
-   - Node.js / npm → 📦  Next.js → ⚡  React → ⚛️  Python → 🐍
-   - Docker → 🐳  Rust → 🦀  Go → 🐹  Git → 🌱  Testes → 🧪
-   - Deploy → 🚀  Build → 🏗️  Banco de Dados → 🗄️  Lint → 🔍
-
-4. Agrupe tarefas logicamente usando o campo "group".
-5. Filtre scripts de hooks do npm (preinstall, postbuild, etc.).
-6. Gere no máximo 20 tasks.
-7. O campo "name" deve ser "${projectName}" ou um nome mais legível derivado do contexto.
-8. NÃO inclua comandos perigosos como rm -rf /, fork bombs, ou comandos destrutivos irreversíveis.
+3. Use emojis relevantes: Executável = ⚙️  | Python = 🐍 | JS/TS = 📦 | Shell/Bat = 🪟 | Docker = 🐳
+4. Gere no máximo 15 tasks relevantes. Filtre as inúteis.
+5. O campo "name" deve ser derivado do contexto ou "${projectName}".
+6. NÃO inclua comandos destrutivos (rm -rf, etc).
 `.trim();
 }
 
