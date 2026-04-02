@@ -352,23 +352,53 @@ async function runPromptExport(cwd: string): Promise<void> {
   s.start(theme.muted('Escaneando repositório para formatar o Prompt de IA…'));
   
   // Lazy imports
-  const { scanRepository, buildSystemPrompt } = await import('../core/ai-agent.js');
+  const { scanRepository, buildSystemPrompt, getExportPromptTemplate } = await import('../core/ai-agent.js');
   
   const projectName = path.basename(cwd);
   const summary = await scanRepository(cwd);
-  const promptRaw = buildSystemPrompt(summary, projectName);
   
-  s.stop(theme.success('📋 Prompt para Geração de horus.json finalizado com sucesso!'));
+  // Usa template customizado se existir, senão usa o padrão
+  const template = getExportPromptTemplate();
+  const promptRaw = template ? 
+    template.replace('{{PROJECT_SUMMARY}}', summary).replace('{{PROJECT_NAME}}', projectName) :
+    buildSystemPrompt(summary, projectName);
   
-  console.log();
-  clack.log.info(theme.primary('Copie o texto abaixo e cole no ChatGPT, Claude, Cursor ou Windsurf'));
-  console.log(theme.muted('  ' + '─'.repeat(40)));
-  console.log(theme.white(promptRaw));
-  console.log(theme.muted('  ' + '─'.repeat(40)));
-  console.log();
+  s.stop(theme.success('📋 Prompt para Geração de horus.json finalizado!'));
   
-  clack.log.info(theme.accent('↑ Acima está todo o contexto mapeado do projeto!'));
-  clack.log.info(theme.muted('Cole no seu Chatbot preferido, ele gerará o horus.json instantaneamente para você.'));
+  // Copia automaticamente para o clipboard
+  try {
+    const { execaSync } = await import('execa');
+    
+    if (process.platform === 'darwin') {
+      execaSync('pbcopy', [], { input: promptRaw });
+    } else if (process.platform === 'win32') {
+      const normalized = promptRaw.replace(/\r?\n/g, '\r\n');
+      execaSync('cmd.exe', ['/c', 'chcp 65001 >NUL && clip'], { input: normalized });
+    } else {
+      try {
+        execaSync('xclip', ['-selection', 'clipboard'], { input: promptRaw });
+      } catch {
+        execaSync('xsel', ['--clipboard', '--input'], { input: promptRaw });
+      }
+    }
+    
+    clack.log.success(theme.success('✓ Prompt copiado para a área de transferência! 📋'));
+  } catch {
+    clack.log.warn(theme.warn('⚠ Não foi possível copiar automaticamente. Copie manualmente abaixo:'));
+  }
+
+  // Exibe preview compacto
+  const previewLines = promptRaw.split('\n').slice(0, 8).join('\n');
+  clack.note(
+    [
+      previewLines,
+      '',
+      theme.muted(`... (${promptRaw.split('\n').length} linhas no total)`),
+      '',
+      theme.accent('Cole no ChatGPT, Claude, Cursor ou Windsurf para gerar o horus.json'),
+    ].join('\n'),
+    theme.primary('📋 Prompt Copiado'),
+  );
 }
 
 // ─── Análise de Stack (heurística local) ────────────────────────────────────

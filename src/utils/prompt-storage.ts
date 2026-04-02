@@ -3,10 +3,61 @@ import * as path from 'node:path';
 import { HORUS_HOME } from './env.js';
 
 export const PROMPTS_DIR = path.join(HORUS_HOME, 'prompts');
+const PROMPTS_META_PATH = path.join(HORUS_HOME, 'prompts_meta.json');
 
 export interface PromptFile {
   name: string;
   path: string;
+}
+
+export interface PromptMeta {
+  lastAccessed: number;
+}
+
+export type PromptsMetaMap = Record<string, PromptMeta>;
+
+/**
+ * Lê o mapa paralelo de metadados dos prompts (Tratado com Fail-Silent)
+ */
+export function getPromptsMeta(): PromptsMetaMap {
+  try {
+    if (fs.existsSync(PROMPTS_META_PATH)) {
+      return JSON.parse(fs.readFileSync(PROMPTS_META_PATH, 'utf-8'));
+    }
+  } catch {}
+  return {};
+}
+
+/**
+ * Persiste o mapa paralelo de acessos
+ */
+function savePromptsMeta(meta: PromptsMetaMap) {
+  try {
+    fs.writeFileSync(PROMPTS_META_PATH, JSON.stringify(meta, null, 2), 'utf-8');
+  } catch {}
+}
+
+/**
+ * Hook para ser chamado sempre que um usuário abrir um Prompt na CLI
+ */
+export function updatePromptAccess(filename: string) {
+  const meta = getPromptsMeta();
+  meta[filename] = { lastAccessed: Date.now() };
+  savePromptsMeta(meta);
+}
+
+/**
+ * Retorna os X Prompts mais acessados da história do dev (O(N) rápido)
+ */
+export function getTopPrompts(limit: number = 5): PromptFile[] {
+  const allPrompts = listPrompts();
+  const meta = getPromptsMeta();
+
+  return allPrompts.sort((a, b) => {
+    const aTime = meta[a.name]?.lastAccessed || 0;
+    const bTime = meta[b.name]?.lastAccessed || 0;
+    return bTime - aTime;     // Decrescente
+  }).slice(0, limit);
 }
 
 /**

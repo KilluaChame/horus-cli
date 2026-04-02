@@ -313,7 +313,7 @@ export async function handleAiConfig(): Promise<void> {
     const session = await clack.select({
       message: theme.primary('⚙️  Configuração do horus'),
       options: [
-        { value: 'providers', label: `${theme.accent('🤖')}  Provedores de IA`, hint: 'Tokens e Modelos (BYOK)' },
+        { value: 'horus-json', label: `${theme.accent('📜')}  horus.json`, hint: 'Provedores de IA, Prompt Export e Modo Manual' },
         { value: 'prompts', label: `${theme.white('📝')}  Prompts Gerais`, hint: 'Gerenciar templates Markdown' },
         { value: 'back', label: `${theme.muted('←')}  Voltar ao Menu Principal` },
       ]
@@ -323,10 +323,132 @@ export async function handleAiConfig(): Promise<void> {
       return;
     }
 
-    if (session === 'providers') {
-      await manageProviders();
+    if (session === 'horus-json') {
+      await manageHorusJson();
     } else if (session === 'prompts') {
       await managePrompts();
+    }
+  }
+}
+
+// ─── Submenu: 📜 horus.json ──────────────────────────────────────────────────
+
+async function manageHorusJson(): Promise<void> {
+  while (true) {
+    const action = await clack.select({
+      message: theme.primary('📜  horus.json — Configuração da geração'),
+      options: [
+        { value: 'providers', label: `${theme.accent('🤖')}  Provedores de IA`, hint: 'Tokens e Modelos (BYOK)' },
+        { value: 'edit-export', label: `${theme.white('📋')}  Editar prompt (Export)`, hint: 'Personalizar o prompt copiado para ChatGPT/Cursor' },
+        { value: 'edit-manual', label: `${theme.primary('🕹️')}  Editar modo Manual`, hint: 'Personalizar o template do wizard manual' },
+        { value: 'back', label: `${theme.muted('←')}  Voltar` },
+      ]
+    });
+
+    if (wasCancelled(action) || action === 'back') return;
+
+    if (action === 'providers') {
+      await manageProviders();
+    } else if (action === 'edit-export') {
+      await editExportPrompt();
+    } else if (action === 'edit-manual') {
+      await editManualTemplate();
+    }
+  }
+}
+
+async function editExportPrompt(): Promise<void> {
+  const { ensureExportTemplate } = await import('../core/ai-agent.js');
+  const templatePath = ensureExportTemplate();
+  
+  const { drawAsciiPanel } = await import('../ui/panels.js');
+  
+  drawAsciiPanel(
+    theme.primary('#### 📋 Prompt de Export'),
+    [
+      '',
+      theme.white('Este é o prompt usado quando você seleciona "Copiar Prompt (Export)" na inicialização.'),
+      theme.muted('Ele é colado no ChatGPT/Claude/Cursor para gerar o horus.json.'),
+      '',
+      theme.accent('Placeholders disponíveis:'),
+      `  ${theme.success('{{PROJECT_SUMMARY}}')} — Contexto escaneado do repositório`,
+      `  ${theme.success('{{PROJECT_NAME}}')}    — Nome do projeto`,
+      '',
+      theme.muted(`Arquivo: ${templatePath}`),
+      '',
+    ]
+  );
+
+  const action = await clack.select({
+    message: theme.primary('* O que deseja fazer?'),
+    options: [
+      { value: 'edit', label: `${theme.accent('✏️')}  Editar prompt` },
+      { value: 'reset', label: `${theme.warn('⟳')}  Restaurar padrão` },
+      { value: 'back', label: `${theme.muted('←')}  Voltar` },
+    ]
+  });
+
+  if (wasCancelled(action) || action === 'back') return;
+
+  if (action === 'edit') {
+    await openEditor(templatePath);
+    clack.log.success(theme.success('Template de Export salvo com sucesso!'));
+  } else if (action === 'reset') {
+    const confirm = await clack.confirm({
+      message: theme.warn('Restaurar o prompt Export para o padrão original?'),
+      initialValue: false,
+    });
+    if (!wasCancelled(confirm) && confirm) {
+      const fs = await import('node:fs');
+      if (fs.existsSync(templatePath)) fs.unlinkSync(templatePath);
+      ensureExportTemplate();
+      clack.log.success(theme.success('Template restaurado para o padrão!'));
+    }
+  }
+}
+
+async function editManualTemplate(): Promise<void> {
+  const { ensureManualTemplate } = await import('../core/ai-agent.js');
+  const templatePath = ensureManualTemplate();
+  
+  const { drawAsciiPanel } = await import('../ui/panels.js');
+  
+  drawAsciiPanel(
+    theme.primary('#### 🕹️ Template do Modo Manual'),
+    [
+      '',
+      theme.white('Este arquivo serve como referência para a inicialização manual do horus.json.'),
+      theme.muted('Edite os grupos, ícones e labels para personalizar o wizard.'),
+      '',
+      theme.muted(`Arquivo: ${templatePath}`),
+      '',
+    ]
+  );
+
+  const action = await clack.select({
+    message: theme.primary('* O que deseja fazer?'),
+    options: [
+      { value: 'edit', label: `${theme.accent('✏️')}  Editar template` },
+      { value: 'reset', label: `${theme.warn('⟳')}  Restaurar padrão` },
+      { value: 'back', label: `${theme.muted('←')}  Voltar` },
+    ]
+  });
+
+  if (wasCancelled(action) || action === 'back') return;
+
+  if (action === 'edit') {
+    await openEditor(templatePath);
+    clack.log.success(theme.success('Template Manual salvo com sucesso!'));
+  } else if (action === 'reset') {
+    const confirm = await clack.confirm({
+      message: theme.warn('Restaurar o template Manual para o padrão original?'),
+      initialValue: false,
+    });
+    if (!wasCancelled(confirm) && confirm) {
+      const fs = await import('node:fs');
+      if (fs.existsSync(templatePath)) fs.unlinkSync(templatePath);
+      ensureManualTemplate();
+      clack.log.success(theme.success('Template restaurado para o padrão!'));
     }
   }
 }
@@ -335,10 +457,21 @@ export async function handleAiConfig(): Promise<void> {
 
 async function managePrompts(): Promise<void> {
   const promptStorage = await import('../utils/prompt-storage.js');
+  const { drawAsciiPanel } = await import('../ui/panels.js');
   
   while (true) {
     const prompts = promptStorage.listPrompts();
     
+    drawAsciiPanel(
+      theme.primary('#### 📝 Prompts Gerais'),
+      [
+        '',
+        theme.white('Aqui você pode criar e editar os prompts que serão usados pelos agentes.'),
+        theme.muted('Use {{placeholders}} para variáveis substituídas em tempo de execução.'),
+        ''
+      ]
+    );
+
     const options = [
       { value: '__create__', label: `${theme.success('➕')} Criar Prompt` },
     ];
@@ -354,7 +487,7 @@ async function managePrompts(): Promise<void> {
     options.push({ value: '__back__', label: `${theme.muted('←')} Voltar` });
 
     const selection = await clack.select({
-      message: theme.primary('📝 Prompts Gerais'),
+      message: theme.primary('* Selecione um prompt para editar:'),
       options
     });
 
@@ -407,22 +540,26 @@ async function managePrompts(): Promise<void> {
   }
 }
 
-async function manageSinglePrompt(filename: string, promptStorage: any): Promise<void> {
+export async function manageSinglePrompt(filename: string, promptStorage: any): Promise<void> {
   const filePath = path.join(promptStorage.PROMPTS_DIR, filename);
 
+  const { drawAsciiPanel } = await import('../ui/panels.js');
+  const { updatePromptAccess } = await import('../utils/prompt-storage.js');
+
   while (true) {
+    updatePromptAccess(filename);
+
     if (fs.existsSync(filePath)) {
       try {
         const rawContent = fs.readFileSync(filePath, 'utf-8').trim();
-        const sizeKB = (Buffer.byteLength(rawContent, 'utf-8') / 1024).toFixed(1);
+        const sizeKB = (Buffer.byteLength(rawContent, 'utf-8') / 1024).toFixed(2);
         const termWidth = process.stdout.columns || 80;
         const maxLineLength = Math.max(termWidth - 5, 20);
 
-        clack.log.info(theme.primary(`📄 ${filename} (${sizeKB} KB)`));
-        console.log(theme.muted('│'));
+        const renderedLines: string[] = [];
 
         if (rawContent.length === 0) {
-          console.log(`${theme.muted('│')}   ${theme.muted('Este prompt está vazio. Clique em Editar para adicionar instruções.')}`);
+          renderedLines.push(theme.muted('Este prompt está vazio. Escalonado para edição física.'));
         } else {
           const rawLines = rawContent.split(/\r?\n/);
           
@@ -444,13 +581,12 @@ async function manageSinglePrompt(filename: string, promptStorage: any): Promise
                 .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, txt, url) => `${theme.white(txt)}(${theme.accent(url)})`)
                 .replace(/`([^`]+)`/g, (match, code) => theme.primary(code));
               
-              console.log(`${theme.muted('│')}   ${printChunk}`);
+              renderedLines.push(printChunk);
             });
           }
         }
-
-        console.log(theme.muted('│'));
-        console.log(theme.muted('╰──────────────────────────────────────────────────────────'));
+        
+        drawAsciiPanel(theme.primary(`#### ⚙️ Gerenciar Prompt: ${theme.accent(filename)} ${theme.muted(`[${sizeKB} KB]`)}`), renderedLines);
       } catch { /* erro silent */ }
     } else {
       // Se não existir mais, sai do loop
@@ -458,7 +594,7 @@ async function manageSinglePrompt(filename: string, promptStorage: any): Promise
     }
 
     const action = await clack.select({
-      message: theme.primary(`⚙️  Gerenciar Prompt: ${theme.accent(filename)}`),
+      message: theme.primary(`*  Selecione uma ação:`),
       options: [
         { value: 'copy', label: `${theme.white('📋')}  Copiar Prompt` },
         { value: 'edit', label: `${theme.accent('✏️')}  Editar Prompt` },
@@ -515,16 +651,23 @@ async function manageSinglePrompt(filename: string, promptStorage: any): Promise
 // ─── Provedores de IA ────────────────────────────────────────────────────────
 
 export async function manageProviders(): Promise<void> {
+  const { drawAsciiPanel } = await import('../ui/panels.js');
+  
   const providerGuide = PROVIDERS
-    .map((p) => `  ${theme.accent('●')} ${theme.white(p.label.padEnd(22))} ${theme.muted('→')} ${theme.accent(p.keyUrl)}`)
-    .join('\n');
+    .map((p) => `  ${theme.accent('●')} ${theme.white(p.label.padEnd(22))} ${theme.muted('→')} ${theme.accent(p.keyUrl)}`);
 
-  clack.note(
-    `${theme.white('Onde obter sua API Key:')}\n\n` +
-    providerGuide + '\n\n' +
-    `${theme.muted('💡 Dica: O Ollama roda 100% local e não precisa de API Key.')}\n` +
-    `${theme.muted('🔒 Suas chaves serão salvas em')} ${theme.accent('~/.horus/.env')} ${theme.muted('(fora do Git).')}`,
-    theme.primary('🤖 Provedores de IA')
+  drawAsciiPanel(
+    theme.primary('#### 🤖 Provedores de IA'),
+    [
+      '',
+      `${theme.white('Onde obter sua API Key:')}`,
+      '',
+      ...providerGuide,
+      '',
+      `${theme.muted('💡 Dica: O Ollama roda 100% local e não precisa de API Key.')}`,
+      `${theme.muted('🔒 Suas chaves serão salvas em')} ${theme.accent('~/.horus/.env')} ${theme.muted('(fora do repositório Git).')}`,
+      ''
+    ]
   );
 
   while (true) {
@@ -859,7 +1002,13 @@ function hasProviderKey(
 
 /**
  * Invoca a verificação do provedor ativo antes da inicialização com Agent.
- * Retorna ok: true se há um provedor ativo e validado como 'valid'.
+ * 
+ * Estratégia de Fallback Resiliente:
+ *   1. Percorre TODOS os provedores que possuem chave configurada.
+ *   2. Retorna imediatamente o PRIMEIRO cuja validação seja 'valid'.
+ *   3. Se NENHUM for válido, retorna o erro do último provedor testado.
+ *   4. Ordem de prioridade: gemini → openrouter → groq → openai → anthropic → ollama
+ *      (Ollama é o último pois depende de um servidor local estar rodando)
  */
 export async function checkActiveProviderHealth(): Promise<{ ok: boolean; status?: ProviderStatus; errorMsg?: string; label?: string }> {
   if (!fs.existsSync(GLOBAL_ENV_PATH)) {
@@ -876,25 +1025,46 @@ export async function checkActiveProviderHealth(): Promise<{ ok: boolean; status
   const { loadGlobalEnv } = await import('../utils/env.js');
   loadGlobalEnv();
   
-  for (const pValue of ['ollama', 'openrouter', 'groq', 'gemini']) {
-    const p = PROVIDERS.find(x => x.value === pValue)!;
-    if (hasProviderKey(p, envMap)) {
-      const keyValue = p.value === 'ollama' ? 'local' : (envMap.get(p.envKey) || process.env[p.envKey] || '');
-      const result = await validateApiKey(p, keyValue);
-      
-      // Salva atomicamente para os logs / UI reagir
-      setProviderStatus(p.value, result.status, result.errorMsg);
-      
-      const ret: { ok: boolean; status?: ProviderStatus; errorMsg?: string; label?: string } = {
-        ok: result.status === 'valid', 
-        status: result.status, 
-        label: p.label 
-      };
-      if (result.errorMsg !== undefined) {
-        ret.errorMsg = result.errorMsg;
-      }
-      return ret;
+  // Ordem de prioridade: cloud-first, Ollama por último (depende de server local)
+  const priorityOrder = ['gemini', 'openrouter', 'groq', 'openai', 'anthropic', 'ollama'];
+  
+  let lastFailure: { status: ProviderStatus; errorMsg?: string; label: string } | null = null;
+  let anyConfigured = false;
+
+  for (const pValue of priorityOrder) {
+    const p = PROVIDERS.find(x => x.value === pValue);
+    if (!p) continue;
+    if (!hasProviderKey(p, envMap)) continue;
+    
+    anyConfigured = true;
+    const keyValue = p.value === 'ollama' ? 'local' : (envMap.get(p.envKey) || process.env[p.envKey] || '');
+    const result = await validateApiKey(p, keyValue);
+    
+    // Salva atomicamente para os logs / UI reagir
+    setProviderStatus(p.value, result.status, result.errorMsg);
+    
+    // Se válido → retorna imediatamente (primeiro válido ganha)
+    if (result.status === 'valid') {
+      return { ok: true, status: 'valid', label: p.label };
     }
+    
+    // Se inválido → guarda como último erro e continua tentando os próximos
+    const failure: { status: ProviderStatus; errorMsg?: string; label: string } = { status: result.status, label: p.label };
+    if (result.errorMsg !== undefined) failure.errorMsg = result.errorMsg;
+    lastFailure = failure;
   }
-  return { ok: false, errorMsg: 'Nenhum provedor de IA configurado no ~/.horus/.env' };
+  
+  // Nenhum provedor foi válido
+  if (!anyConfigured) {
+    return { ok: false, errorMsg: 'Nenhum provedor de IA configurado no ~/.horus/.env' };
+  }
+  
+  // Retorna o último erro encontrado
+  const ret: { ok: boolean; status?: ProviderStatus; errorMsg?: string; label?: string } = {
+    ok: false,
+    status: lastFailure!.status,
+    label: lastFailure!.label,
+  };
+  if (lastFailure!.errorMsg !== undefined) ret.errorMsg = lastFailure!.errorMsg;
+  return ret;
 }

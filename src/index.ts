@@ -237,49 +237,26 @@ async function showInteractiveMenu(): Promise<void> {
       renderContextBar(cwdProject ? { projectName: cwdProject.name } : {});
 
       // ── Opções do menu — spec exata do PRD ──────────────────────────────
-      type MenuValue =
-        | 'recent' | 'projects' | 'run' | 'add' | 'list' | 'remove' | 'init' | 'readme' | 'config' | 'help' | 'exit';
-
-      const menuOptions: Array<{ value: MenuValue; label: string; hint?: string }> = [
+      const menuOptions: Array<{ value: string; label: string; hint?: string }> = [
         {
           value: 'recent',
-          label: `${theme.accent('⭐')}  Mais Acessados`,
-          hint: 'Acesso rápido',
+          label: `${theme.accent('⭐')}  Favoritos`,
+          hint: 'Projetos e Prompts acessados recentes',
         },
         {
           value: 'projects',
           label: `${theme.white('≡')}  Projetos`,
-          hint: 'Navegar e filtrar',
+          hint: 'Navegar, registrar e gerenciar projetos',
         },
         {
           value: 'run',
           label: `${theme.success('▶')}  Executar comando rápido`,
-          hint: 'Descobre scripts no projeto atual',
-        },
-        {
-          value: 'add',
-          label: `${theme.accent('+')}  Registrar novo projeto`,
-          hint: 'Adicionar pasta atual ou manual',
-        },
-        {
-          value: 'remove',
-          label: `${theme.warn('−')}  Remover projeto`,
-          hint: 'Desvincular do registro',
-        },
-        {
-          value: 'init',
-          label: `${theme.accent('✦')}  Inicializar horus.json`,
-          hint: 'Configuração flexível',
-        },
-        {
-          value: 'readme',
-          label: `${theme.white('📖')}  Ler README do Projeto`,
-          hint: 'Visualiza o README.md local',
+          hint: 'Descobre scripts no diretório atual',
         },
         {
           value: 'config',
           label: `${theme.primary('⚙️')}  Configuração do horus`,
-          hint: 'Provedores de IA e chaves API',
+          hint: 'Provedores de IA e Prompts Globais',
         },
         {
           value: 'help',

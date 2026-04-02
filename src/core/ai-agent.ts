@@ -22,6 +22,75 @@ import { z } from 'zod';
 import { HorusConfigSchema } from './parser.js';
 import { setProviderStatus } from '../commands/ai-config.js';
 
+// ─── Constantes de Template ──────────────────────────────────────────────────
+
+const HORUS_DIR = path.join(os.homedir(), '.horus');
+const EXPORT_TEMPLATE_PATH = path.join(HORUS_DIR, 'prompt_export.md');
+const MANUAL_TEMPLATE_PATH = path.join(HORUS_DIR, 'prompt_manual.md');
+
+/**
+ * Retorna o template customizado do Export, ou null se não existir.
+ * O template deve conter {{PROJECT_SUMMARY}} e {{PROJECT_NAME}} como placeholders.
+ */
+export function getExportPromptTemplate(): string | null {
+  try {
+    if (fs.existsSync(EXPORT_TEMPLATE_PATH)) {
+      return fs.readFileSync(EXPORT_TEMPLATE_PATH, 'utf-8');
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * Salva o template padrão do Export no disco para edição.
+ */
+export function ensureExportTemplate(): string {
+  if (!fs.existsSync(HORUS_DIR)) fs.mkdirSync(HORUS_DIR, { recursive: true });
+  if (!fs.existsSync(EXPORT_TEMPLATE_PATH)) {
+    const defaultTemplate = buildSystemPrompt('{{PROJECT_SUMMARY}}', '{{PROJECT_NAME}}');
+    fs.writeFileSync(EXPORT_TEMPLATE_PATH, defaultTemplate, 'utf-8');
+  }
+  return EXPORT_TEMPLATE_PATH;
+}
+
+/**
+ * Retorna o caminho do template Manual, criando-o com um padrão se não existir.
+ */
+export function ensureManualTemplate(): string {
+  if (!fs.existsSync(HORUS_DIR)) fs.mkdirSync(HORUS_DIR, { recursive: true });
+  if (!fs.existsSync(MANUAL_TEMPLATE_PATH)) {
+    const defaultManual = [
+      '# Template de Inicialização Manual do horus.json',
+      '',
+      '> Este arquivo define a estrutura padrão usada pelo `hrs init` no modo Manual.',
+      '> Edite os grupos e labels para personalizar o wizard.',
+      '',
+      '## Grupos padrão sugeridos:',
+      '- Desenvolvimento',
+      '- Build',
+      '- Qualidade',
+      '- Testes',
+      '- Banco de Dados',
+      '- Docker',
+      '- Git',
+      '- Deploy',
+      '',
+      '## Mapeamento de Ícones:',
+      '- 👁️  Watch Mode → npm run dev',
+      '- 🏗️  Build → npm run build',
+      '- 🚀 Iniciar → npm run start',
+      '- 🔍 Lint → npm run lint',
+      '- 🧪 Testes → npm run test',
+      '- 🗄️  Migrar DB → npx prisma migrate dev',
+      '',
+      '## Observações:',
+      'Ao editar este arquivo, o modo Manual usará estes templates como referência.',
+    ].join('\n');
+    fs.writeFileSync(MANUAL_TEMPLATE_PATH, defaultManual, 'utf-8');
+  }
+  return MANUAL_TEMPLATE_PATH;
+}
+
 // ─── Tipos públicos ───────────────────────────────────────────────────────────
 
 export interface AiAgentResult {
@@ -338,47 +407,45 @@ function auditTasks(
 // ─── Chamada ao LLM (Lazy-loaded) ────────────────────────────────────────────
 
 async function callAiProvider(prompt: string): Promise<string> {
-  const ollamaModel = process.env['OLLAMA_MODEL'];
+  const geminiKey = process.env['HORUS_GEMINI_KEY'] ?? process.env['GEMINI_API_KEY'];
   const openRouterKey = process.env['OPENROUTER_API_KEY'];
   const groqKey = process.env['GROQ_API_KEY'];
-  const geminiKey = process.env['HORUS_GEMINI_KEY'] ?? process.env['GEMINI_API_KEY'];
+  const openaiKey = process.env['OPENAI_API_KEY'];
+  const anthropicKey = process.env['ANTHROPIC_API_KEY'];
+  const ollamaModel = process.env['OLLAMA_MODEL'];
 
-  if (!ollamaModel && !openRouterKey && !groqKey && !geminiKey) {
+  if (!geminiKey && !openRouterKey && !groqKey && !openaiKey && !anthropicKey && !ollamaModel) {
     throw Object.assign(new Error('Nenhum provedor de IA encontrado.'), { code: 'no-api-key' });
   }
 
   let text = '';
   const errors: string[] = [];
 
-  // 1. Provedor Local (Ollama)
-  if (ollamaModel && !text) {
+  // ── 1. Gemini (Cloud — Prioridade Máxima) ──────────────────────────────────
+  if (geminiKey && !text) {
     try {
-      const host = process.env['OLLAMA_HOST'] ?? 'http://127.0.0.1:11434';
-      const response = await fetch(`${host}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: ollamaModel,
-          prompt, stream: false, format: 'json',
-          options: { temperature: 0.0 }
-        }),
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(geminiKey as string);
+      const modelName = process.env['GEMINI_MODEL'] || 'gemini-2.0-flash';
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: { responseMimeType: 'application/json', temperature: 0 },
       });
-      if (!response.ok) {
-        if (response.status === 429) throw Object.assign(new Error(`Ollama HTTP 429: Too Many Requests`), { status: 429 });
-        throw new Error(`Falha Ollama HTTP: ${response.status}`);
-      }
-      const data = await response.json() as { response: string };
-      text = data.response;
-      setProviderStatus('ollama', 'valid');
+      const result = await model.generateContent(prompt);
+      text = result.response.text();
+      setProviderStatus('gemini', 'valid');
     } catch (err) {
       const msg = (err as Error).message;
-      if (msg.includes('429') || (err as any).status === 429) setProviderStatus('ollama', 'quota_exceeded', 'Rate Limit (429)');
-      else setProviderStatus('ollama', 'invalid', msg.slice(0, 40));
-      errors.push(`[Ollama] ${msg}`);
+      if (msg.includes('429') || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('rate')) {
+        setProviderStatus('gemini', 'quota_exceeded', 'Cota gratuita esgotada ou Rate Limit');
+      } else {
+        setProviderStatus('gemini', 'invalid', msg.slice(0, 40));
+      }
+      errors.push(`[Gemini] ${msg}`);
     }
   }
 
-  // 2. Provedor Nuvem (OpenRouter)
+  // ── 2. OpenRouter (Cloud) ──────────────────────────────────────────────────
   if (openRouterKey && !text) {
     try {
       const model = process.env['OPENROUTER_MODEL'] || 'meta-llama/llama-3.3-70b-instruct:free';
@@ -417,7 +484,7 @@ async function callAiProvider(prompt: string): Promise<string> {
     }
   }
 
-  // 3. Provedor Nuvem (Groq)
+  // ── 3. Groq (Cloud) ────────────────────────────────────────────────────────
   if (groqKey && !text) {
     try {
       const { Groq } = await import('groq-sdk');
@@ -440,28 +507,102 @@ async function callAiProvider(prompt: string): Promise<string> {
     }
   }
 
-  // 4. Provedor Nuvem (Gemini)
-  if (geminiKey && !text) {
+  // ── 4. OpenAI (Cloud) ──────────────────────────────────────────────────────
+  if (openaiKey && !text) {
     try {
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(geminiKey as string);
-      const modelName = process.env['GEMINI_MODEL'] || 'gemini-2.0-flash';
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: { responseMimeType: 'application/json', temperature: 0 },
+      const model = process.env['OPENAI_MODEL'] || 'gpt-4o-mini';
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0,
+          max_tokens: 2000,
+          response_format: { type: 'json_object' },
+        }),
       });
-      const result = await model.generateContent(prompt);
-      text = result.response.text();
-      setProviderStatus('gemini', 'valid');
+      if (!response.ok) {
+        if (response.status === 429) throw Object.assign(new Error(`OpenAI HTTP 429: Rate Limit`), { status: 429 });
+        throw new Error(`Falha OpenAI HTTP: ${response.status} - ${await response.text()}`);
+      }
+      const data = await response.json() as { choices: Array<{ message: { content: string } }> };
+      text = data.choices?.[0]?.message?.content ?? '';
+      setProviderStatus('openai', 'valid');
     } catch (err) {
       const msg = (err as Error).message;
-      // Trata mensagem de cota esgotada (quota exceeded)
-      if (msg.includes('429') || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('rate')) {
-        setProviderStatus('gemini', 'quota_exceeded', 'Cota gratuita esgotada ou Rate Limit');
+      if (msg.includes('429') || msg.includes('rate') || msg.includes('insufficient_quota')) {
+        setProviderStatus('openai', 'quota_exceeded', 'Rate Limit ou Cota atingida');
       } else {
-        setProviderStatus('gemini', 'invalid', msg.slice(0, 40));
+        setProviderStatus('openai', 'invalid', msg.slice(0, 40));
       }
-      errors.push(`[Gemini] ${msg}`);
+      errors.push(`[OpenAI] ${msg}`);
+    }
+  }
+
+  // ── 5. Anthropic (Cloud) ───────────────────────────────────────────────────
+  if (anthropicKey && !text) {
+    try {
+      const model = process.env['ANTHROPIC_MODEL'] || 'claude-sonnet-4-20250514';
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 2000,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      if (!response.ok) {
+        if (response.status === 429) throw Object.assign(new Error(`Anthropic HTTP 429: Rate Limit`), { status: 429 });
+        throw new Error(`Falha Anthropic HTTP: ${response.status} - ${await response.text()}`);
+      }
+      const data = await response.json() as { content: Array<{ text: string }> };
+      text = data.content?.[0]?.text ?? '';
+      setProviderStatus('anthropic', 'valid');
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (msg.includes('429') || msg.includes('rate')) {
+        setProviderStatus('anthropic', 'quota_exceeded', 'Rate Limit atingido');
+      } else {
+        setProviderStatus('anthropic', 'invalid', msg.slice(0, 40));
+      }
+      errors.push(`[Anthropic] ${msg}`);
+    }
+  }
+
+  // ── 6. Ollama (Local — Último fallback) ────────────────────────────────────
+  if (ollamaModel && !text) {
+    try {
+      const host = process.env['OLLAMA_HOST'] ?? 'http://127.0.0.1:11434';
+      const response = await fetch(`${host}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: ollamaModel,
+          prompt, stream: false, format: 'json',
+          options: { temperature: 0.0 }
+        }),
+      });
+      if (!response.ok) {
+        if (response.status === 429) throw Object.assign(new Error(`Ollama HTTP 429: Too Many Requests`), { status: 429 });
+        throw new Error(`Falha Ollama HTTP: ${response.status}`);
+      }
+      const data = await response.json() as { response: string };
+      text = data.response;
+      setProviderStatus('ollama', 'valid');
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (msg.includes('429') || (err as any).status === 429) setProviderStatus('ollama', 'quota_exceeded', 'Rate Limit (429)');
+      else setProviderStatus('ollama', 'invalid', msg.slice(0, 40));
+      errors.push(`[Ollama] ${msg}`);
     }
   }
 

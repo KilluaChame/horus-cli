@@ -22,6 +22,7 @@ import {
   getRecentProjects,
   touchProject,
   removeProject,
+  updateProjectName,
   type Project,
 } from '../core/registry.js';
 import { handleRunCommand } from './run.js';
@@ -35,47 +36,72 @@ type ChdirResult =
   | { ok: true }
   | { ok: false; reason: 'not_found' | 'not_directory' | 'permission' | 'unknown'; message: string };
 
-// ─── ⭐ Mais Acessados ────────────────────────────────────────────────────────
+// ─── ⭐ Favoritos (Híbrido) ───────────────────────────────────────────────────
 
 /**
- * Sub-menu "⭐ Mais Acessados" — top 5 por lastAccessed.
+ * Sub-menu "⭐ Favoritos" — top projetos e top prompts.
  * Vai direto para o select (sem prompt de busca prévia).
  */
 export async function handleRecentProjects(): Promise<void> {
+  const { getTopPrompts } = await import('../utils/prompt-storage.js');
+  const { handleAiConfig } = await import('./ai-config.js'); // Necessário mock para não duplicar, mas melhor delegar prompts
+  
   while (true) {
-    const recent = getRecentProjects(5);
+    const recentProjects = getRecentProjects(5);
+    const recentPrompts = getTopPrompts(5);
 
-    if (recent.length === 0) {
+    if (recentProjects.length === 0 && recentPrompts.length === 0) {
       clack.note(
         [
-          theme.muted('Nenhum projeto foi acessado ainda.'),
+          theme.muted('Nenhum projeto ou prompt foi acessado ainda.'),
           '',
           `${theme.muted('→ Acesse')} ${theme.accent('≡ Projetos')} ${theme.muted('para selecionar e entrar em um projeto')}`,
         ].join('\n'),
-        theme.primary('⭐ Mais Acessados'),
+        theme.primary('⭐ Favoritos'),
       );
       return;
     }
 
-    const options: Array<{ value: string; label: string; hint?: string }> = [
-      ...recent.map((p, i) => ({
-        value: p.path,
-        label: `${theme.muted(`${i + 1}.`)}  ${formatProjectLabel(p.name, getProjectHealth(p.path))}`,
-        hint: path.relative(process.cwd(), p.path) || p.path,
-      })),
-      { value: '__back__', label: theme.muted('←  Voltar') },
-    ];
+    const options: Array<{ value: string; label: string; hint?: string }> = [];
+
+    if (recentProjects.length > 0) {
+      recentProjects.forEach((p, i) => {
+        options.push({
+          value: `proj:${p.path}`,
+          label: `${theme.muted(`${i + 1}.`)}  ${theme.accent('📦')}  ${formatProjectLabel(p.name, getProjectHealth(p.path))}`,
+          hint: path.relative(process.cwd(), p.path) || p.path,
+        });
+      });
+    }
+
+    if (recentPrompts.length > 0) {
+      recentPrompts.forEach((p, i) => {
+        options.push({
+           value: `prompt:${p.name}`,
+           label: `${theme.muted(`${i + 1}.`)}  ${theme.white('📄')}  ${theme.white(p.name)}`,
+        });
+      });
+    }
+
+    options.push({ value: '__back__', label: theme.muted('←  Voltar') });
 
     const selected = await clack.select({
-      message: theme.primary('⭐ Mais Acessados — Selecione um projeto:'),
-      options,
+      message: theme.primary('⭐ Favoritos — Selecione um atalho:'),
+      options
     });
 
     if (wasCancelled(selected) || selected === '__back__') return;
+    const val = selected as string;
 
-    const project = recent.find((p) => p.path === selected) as Project;
-    await enterProject(project);
-    // volta ao select após retornar do menu de tarefas
+    if (val.startsWith('proj:')) {
+       const project = recentProjects.find((p) => p.path === val.replace('proj:', '')) as Project;
+       await enterProject(project);
+    } else if (val.startsWith('prompt:')) {
+       const promptName = val.replace('prompt:', '');
+       const promptStorage = await import('../utils/prompt-storage.js');
+       const { manageSinglePrompt } = await import('./ai-config.js');
+       await manageSinglePrompt(promptName, promptStorage);
+    }
   }
 }
 
@@ -177,6 +203,7 @@ export async function handleProjectNavigator(): Promise<void> {
     // ── Modo Browse (padrão — navegar por setas ↑↓) ────────────────────────
     const browseOptions: Array<{ value: string; label: string; hint?: string }> = [
       { value: '__search__', label: `${theme.accent('🔍')}  Filtrar por nome…` },
+      { value: '__register__', label: `${theme.accent('➕')}  Registrar novo projeto` },
       ...remaining.map((p) => ({
         value: p.path,
         label: formatProjectLabel(p.name, getProjectHealth(p.path)),
@@ -197,6 +224,12 @@ export async function handleProjectNavigator(): Promise<void> {
       searchQuery = '';
       continue;
     }
+    
+    if (browseSelected === '__register__') {
+      const { handleAddCommand } = await import('./register.js');
+      await handleAddCommand();
+      continue;
+    }
 
     const project = remaining.find((p) => p.path === browseSelected) as Project;
     await enterProject(project);
@@ -207,31 +240,88 @@ export async function handleProjectNavigator(): Promise<void> {
 // ─── Utilitário compartilhado: entrar em um projeto ──────────────────────────
 
 /**
- * Valida, faz cd virtual, atualiza Context Bar e abre o Menu de Tarefas.
+ * Valida, faz cd virtual, atualiza Context Bar e abre o Menu Interno do Projeto.
  * @returns true se o fluxo foi executado com sucesso, false em erro de chdir.
  */
-export async function enterProject(project: Project): Promise<boolean> {
-  const cdResult = tryChdir(project.path);
+export async function enterProject(projectInfo: Project): Promise<boolean> {
+  const cdResult = tryChdir(projectInfo.path);
 
   if (!cdResult.ok) {
     clack.log.error(theme.error(`✗ ${cdResult.message}`));
 
     if (cdResult.reason === 'not_found') {
       const shouldRemove = await clack.confirm({
-        message: theme.warn(`Remover "${project.name}" do registry?`),
+        message: theme.warn(`Remover "${projectInfo.name}" do registry?`),
         initialValue: true,
       });
       if (!wasCancelled(shouldRemove) && shouldRemove === true) {
-        removeProject(project.path);
+        removeProject(projectInfo.path);
         clack.log.success(theme.success('✓ Projeto removido do registry.'));
       }
     }
     return false;
   }
 
-  touchProject(project.path);
-  renderContextBar({ projectName: project.name });
-  await handleRunCommand([]);
+  touchProject(projectInfo.path);
+
+  while (true) {
+    renderContextBar({ projectName: projectInfo.name });
+
+    const menuAction = await clack.select({
+      message: theme.primary(`O que deseja fazer no projeto ${theme.accent(projectInfo.name)}?`),
+      options: [
+        { value: 'run', label: `${theme.success('▶')}  Executar comandos` },
+        { value: 'readme', label: `${theme.white('📖')}  Ler README do Projeto` },
+        { value: 'init', label: `${theme.accent('✦')}  Inicializar horus.json` },
+        { value: 'edit', label: `${theme.warn('⚙️')}  Editar projeto` },
+        { value: 'back', label: `${theme.muted('←')}  Voltar` },
+      ]
+    });
+
+    if (wasCancelled(menuAction) || menuAction === 'back') break;
+
+    if (menuAction === 'run') {
+      await handleRunCommand([]);
+    } else if (menuAction === 'readme') {
+      const { handleReadmeCommand } = await import('./view-readme.js');
+      await handleReadmeCommand();
+    } else if (menuAction === 'init') {
+      const { handleInitCommand } = await import('./init.js');
+      await handleInitCommand([]);
+    } else if (menuAction === 'edit') {
+      const editAction = await clack.select({
+        message: theme.warn(`Configurações de ${theme.accent(projectInfo.name)}`),
+        options: [
+          { value: 'rename', label: `${theme.white('✏️')}  Renomear projeto` },
+          { value: 'remove', label: `${theme.error('🗑️')}  Remover projeto` },
+          { value: 'back', label: `${theme.muted('←')}  Voltar` },
+        ]
+      });
+
+      if (!wasCancelled(editAction) && editAction === 'rename') {
+        const newName = await clack.text({
+          message: 'Digite o novo nome do projeto:',
+          defaultValue: projectInfo.name
+        });
+        if (!wasCancelled(newName) && (newName as string).trim()) {
+           updateProjectName(projectInfo.path, newName as string);
+           projectInfo.name = newName as string; // Atualiza a ref atual da memória
+           clack.log.success(theme.success(`Projeto renomeado para ${projectInfo.name}`));
+        }
+      } else if (!wasCancelled(editAction) && editAction === 'remove') {
+        const confirm = await clack.confirm({
+          message: theme.error(`Tem certeza que deseja remover ${projectInfo.name} permanentemente do registro?`),
+          initialValue: false
+        });
+        if (!wasCancelled(confirm) && confirm === true) {
+           removeProject(projectInfo.path);
+           clack.log.success(theme.success(`Projeto removido.`));
+           break; // Se remover, sai da tela do projeto
+        }
+      }
+    }
+  }
+
   return true;
 }
 

@@ -329,6 +329,29 @@ export function getRecentProjects(limit = 3): readonly Project[] {
     .slice(0, limit);
 }
 
+// ─── Renomear Projeto (Editar alias) ─────────────────────────────────────────
+
+/**
+ * Atualiza o 'name' do projeto (Alias de display) preservando o caminho original.
+ * Retorna true se atualizado, false se nome for inválido ou o projeto não existir.
+ */
+export function updateProjectName(projectPath: string, newName: string): boolean {
+  if (!newName || !newName.trim()) return false;
+  
+  const registry = loadRegistry();
+  const normalizedTarget = normalizePath(path.resolve(projectPath));
+
+  const project = registry.projects.find(
+    (p) => normalizePath(p.path) === normalizedTarget,
+  );
+
+  if (!project) return false;
+
+  project.name = newName.trim();
+  saveRegistry(registry);
+  return true;
+}
+
 // ─── Utilitários ─────────────────────────────────────────────────────────────
 
 /**
