@@ -55,6 +55,7 @@ Thumbs.db
 registry.json
 
 # Tooling
-.agent/
+.agent/skills/*
+!.agent/skills/horus-init/
 .gemini/
 .claude/
