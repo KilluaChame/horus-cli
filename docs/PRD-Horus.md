@@ -306,6 +306,16 @@ Ao entrar em um projeto via `≡ Projetos` ou `⭐ Recentes`:
 
 ---
 
+### 🔲 Fase 14 — Agent Controller Hub (hrs agent)
+
+*Objetivo: Transformar o Horus no lançador central de agentes do Antigravity, integrando visualização de cotas e gerência de contextos.*
+
+1. **Dashboard de Cotas (Bateria):** Lidar com caches gerados pela extensão `antigravity-cockpit` (`~/.antigravity_cockpit/cache/quota_history/`) para exibir as cotas dos Modelos com gradiente de cores (Verde, Amarelo, Vermelho).
+2. **Lançador de Cérebro (Contextos/Sessões):** Ler metadados vivos das conversas salvas em `~/.gemini/antigravity/brain/` permitindo que o usuário retome um Agente/Sessão anterior pelo título sem procurar IDs na IDE.
+3. **Ponte de Execução CLI:** Disparar a invocação interativa delegando o foco diretamente para a IDE.
+
+---
+
 ## 6. Estrutura de Arquivos (Fase 8.5)
 
 ```
