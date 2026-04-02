@@ -125,6 +125,18 @@ Não quer escrever seu contrato `horus.json` à mão? Nós também não. O motor
 }
 ```
 
+### 🤖 IA Agent Skills (O Olho de Horus)
+Trabalha com Cursor, Windsurf, Claude ou Copilot? O Horus pode **ensinar sua IA** a gerar arquivos `horus.json` perfeitos nativamente. 
+
+Instale a Agent Skill oficial do Horus no seu projeto e qualquer agente de IA saberá instantaneamente como mapear sua stack, categorizar tarefas e aplicar os emojis corretos.
+
+**Como usar:**
+1. Rode `hrs init` no seu repositório.
+2. Selecione a opção **`✨ Instalar Skill de IA`**.
+3. Pronto! Abra o chat da sua IDE e peça: `"/horus-init"` ou `"Crie o horus.json desse projeto"`.
+
+*A skill será salva em `.agent/skills/horus-init` e deve ser commitada para que toda a sua equipe tenha a mesma produtividade.*
+
 ### ⚡ Performance Extrema & Fidedignidade
 - **Boot < 300ms:** Arquitetura de compilação modular usando *Lazy Loading*. O motor de IA e as bibliotecas pesadas só entram na memória caso sejam estritamente necessárias.
 - **Transparência Executiva:** O Horus usa a engine transacional do Execa associada ao `stdio: 'inherit'`. O output que você vê da execução da task, os warnings em vermelho e a barra de carregamento do compilador original são mantidos intactos, repassados perfeitamente com todas as cores ANSI nativas. O comando executa como se o Horus não estivesse lá.

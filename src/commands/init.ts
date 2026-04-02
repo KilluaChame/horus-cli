@@ -11,6 +11,7 @@
 import * as clack from '@clack/prompts';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { theme } from '../ui/theme.js';
 import { wasCancelled, handleCancel } from '../ui/prompts.js';
 import { HorusConfigSchema } from '../core/parser.js';
@@ -59,7 +60,7 @@ export async function handleInitCommand(flags: string[]): Promise<void> {
     }
   }
 
-  let mode: 'ai' | 'prompt' | 'manual' | 'config' | 'cancel' = 'ai';
+  let mode: 'ai' | 'prompt' | 'manual' | 'config' | 'install-skill' | 'cancel' = 'ai';
 
   if (flags.includes('--ai')) mode = 'ai';
   else if (flags.includes('--manual')) mode = 'manual';
@@ -72,6 +73,7 @@ export async function handleInitCommand(flags: string[]): Promise<void> {
         { value: 'ai', label: `${theme.accent('✦')} Agent API (Automático)`, hint: 'Descobre tarefas e gera o arquivo nativamente com LLMs na nuvem' },
         { value: 'prompt', label: `${theme.white('📋')} Copiar Prompt (Export)`, hint: 'Gera um prompt perfeito para colar no ChatGPT/Cursor/Windsurf' },
         { value: 'manual', label: `${theme.muted('✎')} Modo Manual`, hint: 'Inicia com scripts nativos e inputs básicos' },
+        { value: 'install-skill', label: `${theme.accent('✨')} Instalar Skill de IA`, hint: 'Instala o "Olho de Horus" (.agent/skills/horus-init) para IA externas' },
         { value: 'config', label: `${theme.primary('⚙️')} Configurar Provedor de IA`, hint: 'BYOK — salva chave API em ~/.horus/.env (seguro)' },
       ]
     });
@@ -80,12 +82,17 @@ export async function handleInitCommand(flags: string[]): Promise<void> {
       clack.log.info(theme.muted('Inicialização cancelada.'));
       return;
     }
-    mode = selection as 'ai' | 'prompt' | 'manual' | 'config';
+    mode = selection as 'ai' | 'prompt' | 'manual' | 'config' | 'install-skill';
   }
 
   if (mode === 'config') {
     const { manageProviders } = await import('./ai-config.js');
     await manageProviders();
+    return;
+  }
+
+  if (mode === 'install-skill') {
+    await runSkillInstallation(targetCwd);
     return;
   }
 
@@ -692,4 +699,76 @@ function writeAndReport(config: Record<string, unknown>, outPath: string): void 
 /** Delay mínimo para UX do spinner de IA */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Instala a skill de agente no projeto alvo */
+async function runSkillInstallation(targetCwd: string): Promise<void> {
+  clack.log.step(theme.primary('Preparando instalação da skill "horus-init"...'));
+  
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  
+  // No build, __dirname será dist/, então a raiz do pacote é dist/..
+  const packageRoot = path.join(__dirname, '..');
+  const skillSourcePath = path.join(packageRoot, '.agent', 'skills', 'horus-init');
+  
+  if (!fs.existsSync(skillSourcePath)) {
+    clack.log.error(theme.error(`✗ Skill não encontrada na instalação do CLI:\n  ${skillSourcePath}`));
+    return;
+  }
+  
+  const targetSkillDir = path.join(targetCwd, '.agent', 'skills', 'horus-init');
+  
+  if (fs.existsSync(targetSkillDir)) {
+    const overwrite = await clack.confirm({
+      message: theme.warn('⚠ A skill já parece estar instalada neste projeto. Sobrescrever?'),
+      initialValue: true,
+    });
+    
+    if (wasCancelled(overwrite) || !overwrite) {
+      clack.log.info(theme.muted('Instalação cancelada.'));
+      return;
+    }
+    
+    fs.rmSync(targetSkillDir, { recursive: true, force: true });
+  }
+  
+  try {
+    // Cria diretório se não existir
+    fs.mkdirSync(path.join(targetCwd, '.agent', 'skills'), { recursive: true });
+    
+    // Copia recursivamente usando cp-like fs operation
+    fs.cpSync(skillSourcePath, targetSkillDir, { recursive: true });
+    
+    // Atualiza .gitignore local para ignorar outras skills, mas permitir a horus-init
+    const gitignorePath = path.join(targetCwd, '.gitignore');
+    let gitignoreContent = '';
+    if (fs.existsSync(gitignorePath)) {
+      gitignoreContent = fs.readFileSync(gitignorePath, 'utf-8');
+    }
+    
+    const ignoreRules = '\n\n# Agent Skills\n.agent/skills/*\n!.agent/skills/horus-init/\n';
+    if (!gitignoreContent.includes('.agent/skills/horus-init')) {
+      fs.appendFileSync(gitignorePath, ignoreRules, 'utf-8');
+      clack.log.step(theme.success('✓ .gitignore atualizado'));
+    }
+    
+    clack.log.success(theme.success(`✓ Skill instalada em: ${targetSkillDir}`));
+    clack.note(
+      [
+        `${theme.bold('A IA do seu projeto agora tem o "Olho de Horus"!')}`,
+        '',
+        `${theme.muted('Para usar no Cursor, Windsurf, Claude ou Copilot, basta pedir:')}`,
+        `  ${theme.accent('"Crie o horus.json para este projeto"')}`,
+        `  ${theme.accent('"/horus-init"')}`,
+        '',
+        `${theme.muted('A skill será commitada no seu repositório para que')}`,
+        `${theme.muted('toda a sua equipe (e as IAs deles) possam usar.')}`
+      ].join('\n'),
+      theme.primary('✨ Skill Instalada com Sucesso')
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    clack.log.error(theme.error(`✗ Erro ao instalar skill: ${msg}`));
+  }
 }
