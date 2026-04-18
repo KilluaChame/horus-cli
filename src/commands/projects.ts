@@ -271,7 +271,7 @@ export async function enterProject(projectInfo: Project): Promise<boolean> {
       message: theme.primary(`O que deseja fazer no projeto ${theme.accent(projectInfo.name)}?`),
       options: [
         { value: 'run', label: `${theme.success('▶')}  Executar comandos` },
-        { value: 'readme', label: `${theme.white('📖')}  Ler README do Projeto` },
+        { value: 'docs', label: `${theme.white('📖')}  Documentos do Projeto` },
         { value: 'init', label: `${theme.accent('✦')}  Inicializar horus.json` },
         { value: 'edit', label: `${theme.warn('⚙️')}  Editar projeto` },
         { value: 'back', label: `${theme.muted('←')}  Voltar` },
@@ -282,9 +282,9 @@ export async function enterProject(projectInfo: Project): Promise<boolean> {
 
     if (menuAction === 'run') {
       await handleRunCommand([]);
-    } else if (menuAction === 'readme') {
-      const { handleReadmeCommand } = await import('./view-readme.js');
-      await handleReadmeCommand();
+    } else if (menuAction === 'docs') {
+      const { handleDocsManager } = await import('./docs-manager.js');
+      await handleDocsManager(projectInfo.path);
     } else if (menuAction === 'init') {
       const { handleInitCommand } = await import('./init.js');
       await handleInitCommand([]);

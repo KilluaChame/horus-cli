@@ -15,10 +15,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as clack from '@clack/prompts';
-import { discoverTasksWithFallback, type Task } from '../core/parser.js';
+import { discoverTasksWithFallback, type Task, type HorusAjuda } from '../core/parser.js';
 import { purgeInvalidProjects, touchProject } from '../core/registry.js';
 import { executeCommand, reportExecutionResult } from '../core/executor.js';
 import { theme, waitForKeypress } from '../ui/theme.js';
+import { renderSobreBanner } from '../ui/sobre-renderer.js';
 import { wasCancelled } from '../ui/prompts.js';
 import { handleInitCommand } from './init.js';
 
@@ -71,7 +72,7 @@ export async function handleRunCommand(extraArgs: string[] = []): Promise<void> 
     } else {
       clack.note(
         [
-          `  ${theme.accent('1.')} Crie um ${theme.bold('horus.json')} na raiz do projeto`,
+          `  ${theme.accent('1.')} Crie um ${theme.bold('.horus/horus.json')} no diretório do projeto`,
           `  ${theme.accent('2.')} Adicione ${theme.bold('scripts')} ao ${theme.bold('package.json')}`,
           `  ${theme.accent('3.')} Ou registre outro projeto com ${theme.bold('hrs add <path>')}`,
         ].join('\n'),
@@ -82,7 +83,7 @@ export async function handleRunCommand(extraArgs: string[] = []): Promise<void> 
   }
 
   // 5. Exibe o menu de tarefas descobertas
-  await showTaskMenu(result.projectName, result.tasks, result.source, projectPath, extraArgs);
+  await showTaskMenu(result.projectName, result.tasks, result.source, projectPath, extraArgs, result.sobre, result.ajuda);
 }
 
 // ─── Resolução do projeto alvo ─────────────────────────────────────────────
@@ -116,6 +117,7 @@ async function resolveProjectPath(): Promise<string | null> {
 
   // Caso 2: cwd tem config local → usa cwd sem registrar
   const hasCwdConfig =
+    fs.existsSync(path.join(cwd, '.horus', 'horus.json')) ||
     fs.existsSync(path.join(cwd, 'horus.json')) ||
     fs.existsSync(path.join(cwd, 'package.json'));
 
@@ -132,7 +134,7 @@ async function resolveProjectPath(): Promise<string | null> {
     clack.note(
       [
         theme.muted('Nenhum projeto registrado e o diretório atual não'),
-        theme.muted('possui horus.json nem package.json.'),
+        theme.muted('possui .horus/horus.json nem package.json.'),
         '',
         `${theme.muted('→ Navegue até um projeto e rode:')} ${theme.accent('hrs add .')}`,
       ].join('\n'),
@@ -176,6 +178,8 @@ async function showTaskMenu(
   source: 'horus.json' | 'package.json',
   projectPath: string,
   extraArgs: string[] = [],
+  sobre?: string,
+  ajuda?: HorusAjuda,
 ): Promise<void> {
   const sourceLabel = source === 'horus.json'
     ? theme.success('horus.json')
@@ -185,6 +189,11 @@ async function showTaskMenu(
     `${theme.primary(projectName)} ${theme.muted('·')} ${sourceLabel} ${theme.muted(`· ${tasks.length} tarefa(s)`)}`,
   );
 
+  // ── Banner "Sobre" (substitui o antigo instructions) ────────────────────
+  if (sobre) {
+    renderSobreBanner(sobre);
+  }
+
   while (true) {
     const options = [
       ...tasks.map((task) => ({
@@ -192,6 +201,14 @@ async function showTaskMenu(
         label: task.label,
         ...(task.hint !== undefined ? { hint: task.hint } : {}),
       })),
+      // Opção de ajuda contextual (só aparece se o campo `ajuda` estiver preenchido)
+      ...(ajuda && ajuda.categorias.length > 0
+        ? [{
+            value: '__help__',
+            label: `${theme.accent('❓')} Ajuda`,
+            hint: 'Guia de comandos e glossário',
+          }]
+        : []),
       {
         value: '__back__',
         label: theme.muted('← Voltar ao menu principal'),
@@ -211,6 +228,13 @@ async function showTaskMenu(
 
     if (selected === '__back__') {
       break;
+    }
+
+    // Handler: Ajuda contextual — abre o viewer e retorna ao menu de tarefas
+    if (selected === '__help__' && ajuda) {
+      const { showHelpMenu } = await import('./help-viewer.js');
+      await showHelpMenu(ajuda);
+      continue;
     }
 
     const cmd = selected as string;

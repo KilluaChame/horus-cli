@@ -20,7 +20,7 @@ import { theme } from './theme.js';
 export interface ProjectHealth {
   /** O diretório do projeto existe no disco */
   exists: boolean;
-  /** Tem horus.json na raiz */
+  /** Tem manifest .horus/horus.json (ou o antigo na raiz) */
   hasHorusJson: boolean;
   /** Tem package.json na raiz */
   hasPackageJson: boolean;
@@ -43,7 +43,7 @@ export function getProjectHealth(projectPath: string): ProjectHealth {
 
   return {
     exists: true,
-    hasHorusJson:    fs.existsSync(path.join(projectPath, 'horus.json')),
+    hasHorusJson:    fs.existsSync(path.join(projectPath, '.horus', 'horus.json')) || fs.existsSync(path.join(projectPath, 'horus.json')),
     hasPackageJson:  fs.existsSync(path.join(projectPath, 'package.json')),
   };
 }

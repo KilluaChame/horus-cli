@@ -35,7 +35,12 @@ export async function handleInitCommand(flags: string[]): Promise<void> {
   const targetCwd = await promptTargetDirectory();
   if (!targetCwd) return; // cancelado
 
-  const outPath = path.join(targetCwd, 'horus.json');
+  const horusDir = path.join(targetCwd, '.horus');
+  const outPath = path.join(horusDir, 'horus.json');
+
+  if (!fs.existsSync(horusDir)) {
+    fs.mkdirSync(horusDir, { recursive: true });
+  }
 
   // Muda o contexto virtualmente antes de prosseguir
   if (process.cwd() !== targetCwd) {
@@ -214,11 +219,20 @@ async function runInteractiveInit(cwd: string, outPath: string): Promise<void> {
 
   if (wasCancelled(descInput)) handleCancel();
 
+  // Sobre o projeto (opcional — descrição de branding exibida como banner)
+  const sobreInput = await clack.text({
+    message: theme.primary('Sobre o projeto (opcional):'),
+    placeholder: 'Ex: API backend em TypeScript com Prisma e PostgreSQL.',
+  });
+
+  if (wasCancelled(sobreInput)) handleCancel();
+
   // Monta o horus.json com as tasks sugeridas
   const config = buildHorusConfig(
     (nameInput as string).trim(),
     descInput ? (descInput as string).trim() : undefined,
     suggestedTasks,
+    sobreInput ? (sobreInput as string).trim() : undefined,
   );
 
   writeAndReport(config, outPath);
@@ -302,6 +316,7 @@ async function runAiInit(cwd: string, outPath: string): Promise<void> {
       stackInfo.projectName,
       `Gerado pelo horus (heurística local) — stack: ${stackInfo.stackLabel}`,
       aiTasks,
+      `Projeto ${stackInfo.stackLabel}. Utilize 'hrs run' para executar as tarefas descobertas.`,
     );
     writeAndReport(config, outPath);
     return;
@@ -649,10 +664,12 @@ function buildHorusConfig(
   name: string,
   description: string | undefined,
   tasks: TaskDraft[],
+  sobre?: string,
 ): Record<string, unknown> {
-  const config = {
+  const config: Record<string, unknown> = {
     name,
     ...(description ? { description } : {}),
+    ...(sobre ? { sobre } : {}),
     tasks: tasks.map((t) => ({
       label: t.label,
       cmd:   t.cmd,
@@ -665,7 +682,7 @@ function buildHorusConfig(
   const result = HorusConfigSchema.safeParse(config);
   if (!result.success) {
     // Fallback seguro: garante ao menos 1 task stub
-    config.tasks = [{ label: '📦 Iniciar', cmd: 'npm start' }];
+    config['tasks'] = [{ label: '📦 Iniciar', cmd: 'npm start' }];
   }
 
   return config;

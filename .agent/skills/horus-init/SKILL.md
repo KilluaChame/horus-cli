@@ -88,6 +88,28 @@ Produce a JSON object following this exact schema:
 {
   "name": "string (human-readable project name, required, min 1 char)",
   "description": "string (optional, concise project description, max 80 chars)",
+  "sobre": "string (optional, rich branding text mentioning key technologies. Max 400 chars. Should sound professional and welcoming.)",
+  "ajuda": {
+    "categorias": [
+      {
+        "titulo": "string (emoji + category name, e.g. '🛠 Desenvolvimento')",
+        "itens": [
+          {
+            "comando": "string (exact shell command)",
+            "descricao": "string (what the command does in clear language)",
+            "exemplo": "string (how to use via hrs, e.g. 'hrs run → select Watch Mode')",
+            "tecnologia": "string (tool/lib the command uses, e.g. 'tsup', 'Docker')"
+          }
+        ]
+      }
+    ],
+    "glossario": [
+      {
+        "simbolo": "string (emoji used in labels)",
+        "significado": "string (what the symbol represents)"
+      }
+    ]
+  },
   "tasks": [
     {
       "label": "string (required, [Emoji] [Friendly Action], max 50 chars)",
@@ -100,6 +122,16 @@ Produce a JSON object following this exact schema:
 ```
 
 The `tasks` array must contain **at least 1 task** and at most **15 tasks**.
+The `ajuda.categorias` array must contain at most **8 categories** with at most **6 items** each.
+
+**Rules for `sobre`:**
+- Always generate a branding text mentioning the real technologies detected in the project.
+- Max 400 characters. Sound professional and welcoming, not generic.
+
+**Rules for `ajuda`:**
+- Generate categories matching the task groups for consistency.
+- Each item must document a real command with description, usage example via hrs, and technology.
+- The glossary must map ALL emojis used in task labels to their meanings.
 
 See `references/schema.md` for the complete Zod schema specification.
 
@@ -125,7 +157,7 @@ Before delivering the JSON, verify:
 3. **Groups are mandatory in spirit.** Every task should be categorized for the CLI's visual grouping.
 4. **Security filter.** Never include commands that could destroy data, format disks, or execute untrusted remote code (`curl | sh`).
 5. **Pre/post hooks.** If a script has `pre` or `post` hooks (e.g., `prebuild`, `postbuild`), do NOT create separate tasks for them — they run automatically.
-6. **Monorepo strategy.** For monorepos, create ONE centralized `horus.json` at the root with groups that distinguish between apps/packages.
+6. **Monorepo strategy.** For monorepos, create ONE centralized `horus.json` at `.horus/horus.json` with groups that distinguish between apps/packages.
 7. **Diagnostic commands.** Always include at least one diagnostic/status command (e.g., `git status`, `docker ps`, `dotnet --info`) for operational transparency.
 
 ## Standard Groups
@@ -146,7 +178,7 @@ Use these group names consistently:
 
 ## Output Format
 
-Deliver the `horus.json` content as a fenced JSON code block. Do not wrap it in markdown explanation — just the JSON.
+Deliver the `horus.json` content as a fenced JSON code block. Do not wrap it in markdown explanation — just the JSON. Also, be aware the file should be saved in the `.horus/horus.json` path since the system expects it in the `.horus` directory.
 
 After the JSON, briefly list what was detected and any recommendations.
 

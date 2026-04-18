@@ -353,34 +353,69 @@ ${projectSummary}
 - Extraia tarefas baseadas em "Make Target" ou "Compose Svc" caso encontre Makefiles ou docker-compose.yml.
 
 ## REGRAS OBRIGATÓRIAS DO JSON
-1. Retorne SOMENTE o JSON, sem markdown, sem blocos de código (exceto se a API for em JSON bruto), sem comentários.
+1. Retorne SOMENTE o JSON, sem markdown, sem blocos de código, sem comentários.
 2. O JSON deve seguir EXATAMENTE este schema:
 {
   "name": "string (nome legível do projeto, sem underlines)",
-  "description": "string (descrição concisa, max 80 chars, use Dicas do README.md se houver)",
+  "description": "string (descrição concisa, max 80 chars)",
+  "sobre": "string (descrição técnica rica do projeto mencionando as tecnologias principais da stack, frameworks e ferramentas. Max 400 chars. Deve soar como um banner de boas-vindas profissional.)",
+  "ajuda": {
+    "categorias": [
+      {
+        "titulo": "string (emoji + nome da categoria, ex: '🛠 Desenvolvimento')",
+        "itens": [
+          {
+            "comando": "string (comando shell exato)",
+            "descricao": "string (o que o comando faz, em linguagem clara)",
+            "exemplo": "string (como usar via hrs, ex: 'hrs run → selecionar Watch Mode')",
+            "tecnologia": "string (ferramenta/lib que o comando usa, ex: 'tsup', 'Docker')"
+          }
+        ]
+      }
+    ],
+    "glossario": [
+      {
+        "simbolo": "string (emoji usado nos labels, ex: '🚀')",
+        "significado": "string (o que o símbolo representa na UI, ex: 'Iniciar / Lançar')"
+      }
+    ]
+  },
   "tasks": [
     {
-      "label": "string ([Ícone de Intenção] [Ação Amigável] ([Tecnologia]), max 50 chars)",
+      "label": "string ([Ícone] [Ação Amigável], max 50 chars)",
       "cmd": "string (comando shell exato para executar)",
       "hint": "string (opcional, instrução clara do que isso faz)",
-      "group": "string (Essential | Development | Database | Utility | Build | Deploy | Git | Automação)"
+      "group": "string (Desenvolvimento | Build | Qualidade | Testes | Banco de Dados | Docker | Git | Deploy | Automação)"
     }
   ]
 }
 
-3. Mapeamento de Ícones Obrigatório no "label":
+3. REGRAS DO CAMPO "sobre":
+   - OBRIGATÓRIO — sempre gere um texto de branding.
+   - Mencione as tecnologias reais detectadas no projeto (ex: "TypeScript", "Prisma", "Docker").
+   - Máximo 400 caracteres. Deve soar profissional e acolhedor.
+
+4. REGRAS DO CAMPO "ajuda":
+   - OBRIGATÓRIO — gere categorias baseadas nos grupos das tasks.
+   - Máximo 8 categorias, máximo 6 itens por categoria.
+   - Cada item deve documentar um comando real com descrição, exemplo de uso via hrs, e tecnologia.
+   - O glossário deve mapear TODOS os emojis usados nos labels das tasks.
+
+5. Mapeamento de Ícones Obrigatório no "label":
     - 🚀 Iniciar/Subir (Infra ou App)
+    - 👁️ Watch/Dev Mode
     - 🏗️ Build/Compilação
     - 🧪 Testes Unitários/E2E
     - 🔍 Lint/Typecheck/Qualidade
     - 📦 Deploy/Release
     - 🗄️ Banco de Dados/Migrações
+    - 🐳 Docker
+    - 🌱 Git
     - ⚙️  Executável/Script Genérico
 
-4. Exemplo de tradução no label: "🚀 Subir Infraestrutura (Docker)" ou "📦 Publicar (npm)".
-5. Gere no máximo 15 tasks relevantes. Omitir as menos importantes.
-6. O campo "name" deve ser derivado do contexto ou "${projectName}".
-7. NÃO inclua comandos destrutivos (rm -rf, del /s /q, Format C:, etc).
+6. Gere no máximo 15 tasks relevantes. Omitir as menos importantes.
+7. O campo "name" deve ser derivado do contexto ou "${projectName}".
+8. NÃO inclua comandos destrutivos (rm -rf, del /s /q, Format C:, etc).
 `.trim();
 }
 

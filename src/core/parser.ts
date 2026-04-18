@@ -35,12 +35,53 @@ export const TaskSchema = z.object({
 });
 
 /**
+ * Schema de um item individual no guia de ajuda.
+ * Cada item documenta um comando do projeto com descrição, exemplo e tecnologia.
+ */
+export const AjudaItemSchema = z.object({
+  comando:    z.string().min(1, 'O comando da ajuda não pode estar vazio'),
+  descricao:  z.string().min(1, 'A descrição da ajuda não pode estar vazia'),
+  exemplo:    z.string().min(1, 'O exemplo de uso não pode estar vazio'),
+  tecnologia: z.string().min(1, 'A tecnologia não pode estar vazia'),
+});
+
+/**
+ * Schema de uma categoria de ajuda (ex: "Desenvolvimento", "Banco de Dados").
+ * Cada categoria agrupa até 6 itens de ajuda para navegabilidade.
+ */
+export const AjudaCategoriaSchema = z.object({
+  titulo: z.string().min(1, 'O título da categoria não pode estar vazio'),
+  itens:  z.array(AjudaItemSchema).min(1, 'Defina pelo menos 1 item na categoria').max(6, 'Máximo de 6 itens por categoria'),
+});
+
+/**
+ * Schema de um item do glossário de símbolos visuais.
+ */
+export const GlossarioItemSchema = z.object({
+  simbolo:     z.string().min(1, 'O símbolo não pode estar vazio'),
+  significado: z.string().min(1, 'O significado não pode estar vazio'),
+});
+
+/**
+ * Schema do objeto de ajuda contextual.
+ * Contém categorias navegáveis e um glossário de símbolos.
+ */
+export const AjudaSchema = z.object({
+  categorias: z.array(AjudaCategoriaSchema).min(1, 'Defina pelo menos 1 categoria').max(8, 'Máximo de 8 categorias'),
+  glossario:  z.array(GlossarioItemSchema).optional(),
+});
+
+/**
  * Schema do arquivo horus.json completo.
  * `tasks` deve ter pelo menos 1 entrada — um horus.json vazio é considerado inválido.
+ * `sobre` substitui o antigo campo `instructions` — descrição estética de branding.
+ * `ajuda` é o guia contextual navegável com categorias e glossário.
  */
 export const HorusConfigSchema = z.object({
   name:        z.string().min(1, 'O nome do projeto não pode estar vazio'),
   description: z.string().optional(),
+  sobre:       z.string().optional(),
+  ajuda:       AjudaSchema.optional(),
   tasks:       z.array(TaskSchema).min(1, 'Defina pelo menos 1 tarefa em "tasks"'),
 });
 
@@ -55,8 +96,12 @@ const PackageJsonSchema = z.object({
 
 // ─── Tipos exportados ─────────────────────────────────────────────────────────
 
-export type Task        = z.infer<typeof TaskSchema>;
-export type HorusConfig = z.infer<typeof HorusConfigSchema>;
+export type Task            = z.infer<typeof TaskSchema>;
+export type HorusConfig     = z.infer<typeof HorusConfigSchema>;
+export type HorusAjuda      = z.infer<typeof AjudaSchema>;
+export type AjudaCategoria  = z.infer<typeof AjudaCategoriaSchema>;
+export type AjudaItem       = z.infer<typeof AjudaItemSchema>;
+export type GlossarioItem   = z.infer<typeof GlossarioItemSchema>;
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -83,6 +128,8 @@ export interface DiscoverySuccess {
   ok: true;
   source: DiscoverySource;
   projectName: string;
+  sobre?: string;
+  ajuda?: HorusAjuda;
   tasks: Task[];
 }
 
@@ -109,12 +156,18 @@ export type DiscoveryResult = DiscoverySuccess | DiscoveryFailure;
  * @param projectPath Caminho absoluto ao diretório do projeto
  */
 export function discoverTasks(projectPath: string): DiscoveryResult {
-  const horusJsonPath   = path.join(projectPath, 'horus.json');
-  const packageJsonPath = path.join(projectPath, 'package.json');
+  const horusJsonModernPath = path.join(projectPath, '.horus', 'horus.json');
+  const horusJsonLegacyPath = path.join(projectPath, 'horus.json');
+  const packageJsonPath     = path.join(projectPath, 'package.json');
 
-  // ── Tentativa 1: horus.json ──────────────────────────────────────────────
-  if (fs.existsSync(horusJsonPath)) {
-    return parseHorusJson(horusJsonPath);
+  // ── Tentativa 1A: .horus/horus.json (Modern) ─────────────────────────────
+  if (fs.existsSync(horusJsonModernPath)) {
+    return parseHorusJson(horusJsonModernPath);
+  }
+
+  // ── Tentativa 1B: horus.json (Legacy) ────────────────────────────────────
+  if (fs.existsSync(horusJsonLegacyPath)) {
+    return parseHorusJson(horusJsonLegacyPath);
   }
 
   // ── Tentativa 2: fallback package.json ──────────────────────────────────
@@ -128,7 +181,7 @@ export function discoverTasks(projectPath: string): DiscoveryResult {
     reason: 'no-files-found',
     message:
       'Nenhum arquivo de configuração encontrado neste diretório.\n' +
-      'Crie um horus.json ou certifique-se de estar em um projeto Node.js.',
+      'Crie um .horus/horus.json ou certifique-se de estar em um projeto Node.js.',
   };
 }
 
@@ -162,6 +215,8 @@ function parseHorusJson(filePath: string): DiscoveryResult {
     ok: true,
     source: 'horus.json',
     projectName: result.data.name,
+    ...(result.data.sobre ? { sobre: result.data.sobre } : {}),
+    ...(result.data.ajuda ? { ajuda: result.data.ajuda } : {}),
     tasks: result.data.tasks,
   };
 }
@@ -302,10 +357,13 @@ export function discoverTasksWithFallback(projectPath: string): {
   result: DiscoveryResult;
   horusWarning?: string;
 } {
-  const horusJsonPath   = path.join(projectPath, 'horus.json');
-  const packageJsonPath = path.join(projectPath, 'package.json');
+  const horusJsonModernPath = path.join(projectPath, '.horus', 'horus.json');
+  const horusJsonLegacyPath = path.join(projectPath, 'horus.json');
+  const packageJsonPath     = path.join(projectPath, 'package.json');
+  
+  const horusJsonPath = fs.existsSync(horusJsonModernPath) ? horusJsonModernPath : horusJsonLegacyPath;
 
-  // Tentativa 1: horus.json
+  // Tentativa 1: horus.json (Modern ou Legacy)
   if (fs.existsSync(horusJsonPath)) {
     const horusResult = parseHorusJson(horusJsonPath);
 
@@ -337,7 +395,7 @@ export function discoverTasksWithFallback(projectPath: string): {
       reason: 'no-files-found',
       message:
         'Nenhum arquivo de configuração encontrado neste diretório.\n' +
-        'Crie um horus.json ou certifique-se de estar em um projeto Node.js.',
+        'Crie um .horus/horus.json ou certifique-se de estar em um projeto Node.js.',
     },
   };
 }

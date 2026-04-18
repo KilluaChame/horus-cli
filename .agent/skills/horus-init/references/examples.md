@@ -14,6 +14,61 @@ Three real-world examples demonstrating the Eye of Horus protocol output for dif
 {
   "name": "My SaaS Dashboard",
   "description": "Next.js 14 dashboard with Prisma ORM and PostgreSQL",
+  "sobre": "Full-stack SaaS dashboard built with Next.js 14 and TypeScript. Uses Prisma ORM for type-safe database access against PostgreSQL. Jest for testing, ESLint for code quality. Deployed via Vercel.",
+  "ajuda": {
+    "categorias": [
+      {
+        "titulo": "🛠 Desenvolvimento",
+        "itens": [
+          {
+            "comando": "npm run dev",
+            "descricao": "Starts Next.js dev server with hot reload on port 3000",
+            "exemplo": "hrs run → select '👁️ Watch Mode'",
+            "tecnologia": "Next.js"
+          },
+          {
+            "comando": "npm run start",
+            "descricao": "Runs the production build locally for final verification",
+            "exemplo": "hrs run → select '🚀 Iniciar'",
+            "tecnologia": "Next.js"
+          }
+        ]
+      },
+      {
+        "titulo": "🗄️ Banco de Dados",
+        "itens": [
+          {
+            "comando": "npm run migrate",
+            "descricao": "Applies pending Prisma migrations to the database",
+            "exemplo": "hrs run → select '🗄️ Migrar DB'",
+            "tecnologia": "Prisma"
+          },
+          {
+            "comando": "npm run studio",
+            "descricao": "Opens Prisma Studio for visual database management",
+            "exemplo": "hrs run → select '🎨 Studio'",
+            "tecnologia": "Prisma"
+          },
+          {
+            "comando": "npm run seed",
+            "descricao": "Populates the database with initial test data",
+            "exemplo": "hrs run → select '🌱 Seed DB'",
+            "tecnologia": "Prisma"
+          }
+        ]
+      }
+    ],
+    "glossario": [
+      { "simbolo": "👁️", "significado": "Watch / Dev Mode — continuous file monitoring" },
+      { "simbolo": "🚀", "significado": "Start / Launch — boots a service or application" },
+      { "simbolo": "🏗️", "significado": "Build / Compilation — generates production artifacts" },
+      { "simbolo": "🔍", "significado": "Quality — lint, typecheck, static analysis" },
+      { "simbolo": "🧪", "significado": "Tests — unit, integration, E2E" },
+      { "simbolo": "🗄️", "significado": "Database — migrations, seeds, schema tools" },
+      { "simbolo": "🎨", "significado": "Studio — visual database management" },
+      { "simbolo": "🌱", "significado": "Git / Seed — version control or data seeding" }
+    ]
+  },
   "tasks": [
     {
       "label": "👁️  Watch Mode",
